@@ -6,7 +6,7 @@ window.CAM_CONFIG = {
   // Alias de la cámara en IPCamLive. Se obtiene del iframe que usa
   // https://www.nevadosdechillan.com/camaras :
   //   <iframe src="https://ipcamlive.com/player/player.php?alias=XXXXXXXX">
-  alias: "",
+  alias: "plazatata",
 
   // Modo de visualización inicial: "hls" | "snapshot" | "iframe"
   //   hls      : video en vivo con hls.js; permite medir y analizar píxeles.
