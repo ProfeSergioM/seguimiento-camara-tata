@@ -119,7 +119,7 @@
   function fijarAspecto(w, h) {
     if (!w || !h) return;
     estado.aspecto = w / h;
-    escenario.style.aspectRatio = w + " / " + h;
+    document.documentElement.style.setProperty("--aspecto", String(w / h));
     dibujarOverlay();
   }
 
@@ -163,7 +163,8 @@
     f.referrerPolicy = "no-referrer-when-downgrade";
     medios.appendChild(f);
     estado.media = f; estado.tipoMedia = "iframe"; estado.pixelesOk = false;
-    escenario.style.aspectRatio = ""; estado.aspecto = CFG.aspectoPorDefecto || 16 / 9;
+    estado.aspecto = CFG.aspectoPorDefecto || 16 / 9;
+    document.documentElement.style.setProperty("--aspecto", String(estado.aspecto));
     dibujarOverlay();
     setEstado("Reproductor oficial (iframe). Se puede medir con la escala; no hay análisis de píxeles.");
   }

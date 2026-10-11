@@ -13,14 +13,17 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--fondo); color: var(--texto); font-family: var(--fuente); }
-body { padding: 0 16px 32px; max-width: 1400px; margin: 0 auto; }
-.cabecera { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; padding: 16px 0 8px; flex-wrap: wrap; }
-h1 { font-size: 1.25rem; margin: 0; }
-.sub { margin: 4px 0 0; color: var(--texto-suave); font-size: 0.9rem; }
-.reloj { font-variant-numeric: tabular-nums; font-size: 1.4rem; color: var(--acento); }
-
-.visor { margin-top: 8px; }
-.escenario { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radio); overflow: hidden; border: 1px solid var(--borde); }
+body { padding: 0 12px 32px; }
+/* La cámara ocupa el ancho disponible sin pasar del alto de la ventana.
+   --aspecto lo fija app.js con la resolución real del video. */
+.visor { --reserva: 84px; width: min(100%, calc((100vh - var(--reserva)) * var(--aspecto, 1.7778))); margin: 8px auto 0; }
+@supports (height: 100dvh) { .visor { width: min(100%, calc((100dvh - var(--reserva)) * var(--aspecto, 1.7778))); } }
+.escenario { position: relative; width: 100%; aspect-ratio: var(--aspecto, 1.7778); background: #000; border-radius: var(--radio); overflow: hidden; border: 1px solid var(--borde); }
+.rotulo { position: absolute; top: 10px; margin: 0; padding: 4px 10px; border-radius: 6px; background: rgba(10, 14, 20, 0.55);
+  color: var(--texto); font-size: clamp(14px, 1.5vw, 26px); font-weight: 600; line-height: 1.3; pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+.titulo { left: 10px; }
+.reloj { right: 10px; font-variant-numeric: tabular-nums; color: var(--acento); }
 .medios, .medios > * { position: absolute; inset: 0; width: 100%; height: 100%; }
 .medios video, .medios img { object-fit: fill; display: block; background: #000; }
 .medios iframe { border: 0; }
@@ -30,11 +33,11 @@ h1 { font-size: 1.25rem; margin: 0; }
 .overlay .arrastrable { cursor: grab; }
 .aviso { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(15,20,25,0.85); padding: 12px 16px; border-radius: var(--radio); border: 1px solid var(--borde); max-width: 80%; text-align: center; }
 
-.barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .grupo { display: flex; gap: 6px; flex-wrap: wrap; }
 .lectura { font-size: 1.1rem; margin-left: auto; margin-right: auto; }
 .lectura strong { color: var(--acento-2); font-variant-numeric: tabular-nums; }
-.estado { color: var(--texto-suave); font-size: 0.85rem; margin: 8px 0 0; }
+.estado { color: var(--texto-suave); font-size: 0.85rem; margin: 4px 0 0; }
 
 .boton { background: var(--panel); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); padding: 8px 12px; font: inherit; cursor: pointer; }
 .boton:hover { border-color: var(--acento); }
