@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 f";
+  const VERSION = "2026-10-11 h";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -436,31 +436,80 @@
     }
   }
 
-  function dibujarGrafico() {
+  // Gráfico del índice en el tiempo (últimas 6 horas). Una sola serie,
+  // línea de 2 px, umbral de alerta como línea punteada rotulada y lectura
+  // del valor más cercano al pasar el mouse.
+  const VENTANA_GRAF_MS = 6 * 3600 * 1000;
+  let puntosGraf = [];
+  function dibujarGrafico(hover) {
+    const dpr = window.devicePixelRatio || 1;
+    const Wc = grafico.clientWidth, Hc = grafico.clientHeight;
+    if (!Wc || !Hc) return;
+    if (grafico.width !== Math.round(Wc * dpr) || grafico.height !== Math.round(Hc * dpr)) {
+      grafico.width = Math.round(Wc * dpr); grafico.height = Math.round(Hc * dpr);
+    }
     const ctx = grafico.getContext("2d");
-    if (grafico.clientWidth) grafico.width = grafico.clientWidth;
-    const W = grafico.width, H = grafico.height, pad = 28;
-    ctx.clearRect(0, 0, W, H);
-    const ms = estado.muestras.slice(-600);
-    ctx.strokeStyle = "#2a333d"; ctx.lineWidth = 1;
-    ctx.strokeRect(pad, 6, W - pad - 6, H - 6 - 18);
-    if (!ms.length) return;
-    const max = Math.max(5, estado.ajustes.umbral * 2, ...ms.map(s => s.indice));
-    const t0 = new Date(ms[0].t).getTime(), t1 = new Date(ms[ms.length - 1].t).getTime() || t0 + 1;
-    const X = (t) => pad + (W - pad - 6) * ((new Date(t).getTime() - t0) / Math.max(1, t1 - t0));
-    const Y = (v) => (H - 18) - (H - 24) * (v / max);
-    // umbral
-    ctx.strokeStyle = "#e5533d"; ctx.setLineDash([4, 4]); ctx.beginPath();
-    ctx.moveTo(pad, Y(estado.ajustes.umbral)); ctx.lineTo(W - 6, Y(estado.ajustes.umbral)); ctx.stroke(); ctx.setLineDash([]);
-    // serie
-    ctx.strokeStyle = "#f4a261"; ctx.lineWidth = 2; ctx.beginPath();
-    ms.forEach((s, i) => { const x = X(s.t), y = Y(s.indice); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, Wc, Hc);
+    const izq = 30, der = 6, arr = 6, aba = 16;
+    const pw = Wc - izq - der, ph = Hc - arr - aba;
+    ctx.font = "11px system-ui, sans-serif";
+    const ahora = Date.now();
+    const ms = estado.muestras.filter(s => ahora - new Date(s.t).getTime() <= VENTANA_GRAF_MS);
+    const umbral = estado.ajustes.umbral;
+    if (!ms.length) {
+      puntosGraf = [];
+      ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(estado.ajustes.muestreo ? "Esperando la primera muestra..." : "Marque «registrar» para graficar el índice", Wc / 2, Hc / 2);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      return;
+    }
+    const max = Math.max(1, umbral * 1.5, ...ms.map(s => s.indice)) * 1.08;
+    const t0 = new Date(ms[0].t).getTime(), t1 = Math.max(t0 + 60000, new Date(ms[ms.length - 1].t).getTime());
+    const X = (t) => izq + pw * ((t - t0) / (t1 - t0));
+    const Y = (v) => arr + ph * (1 - v / max);
+    // Ejes y rejilla recesivos
+    ctx.strokeStyle = "rgba(154, 167, 180, 0.25)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(izq, Y(0) + 0.5); ctx.lineTo(izq + pw, Y(0) + 0.5); ctx.stroke();
+    ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillText("0", izq - 4, Y(0)); ctx.fillText(max.toFixed(max < 10 ? 1 : 0), izq - 4, Y(max) + 4);
+    // Umbral de alerta
+    ctx.strokeStyle = "#e5533d"; ctx.setLineDash([4, 3]); ctx.beginPath();
+    ctx.moveTo(izq, Y(umbral)); ctx.lineTo(izq + pw, Y(umbral)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "right"; ctx.fillText(String(umbral), izq - 4, Y(umbral));
+    ctx.textAlign = "left"; ctx.fillText("umbral", izq + 4, Y(umbral) - 7);
+    // Serie
+    puntosGraf = ms.map(s => ({ x: X(new Date(s.t).getTime()), y: Y(s.indice), s }));
+    ctx.strokeStyle = "#f4a261"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
+    puntosGraf.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.stroke();
-    ctx.fillStyle = "#9aa7b4"; ctx.font = "12px system-ui, sans-serif";
-    ctx.fillText(max.toFixed(0) + "%", 2, 14); ctx.fillText("0", 14, H - 20);
-    const fmt = (t) => horaLocal(new Date(t)).split(" ").pop().slice(0, 5);
-    ctx.fillText(fmt(ms[0].t), pad, H - 4); const fin = fmt(ms[ms.length - 1].t); ctx.fillText(fin, W - 6 - ctx.measureText(fin).width, H - 4);
+    if (puntosGraf.length === 1) { ctx.fillStyle = "#f4a261"; ctx.beginPath(); ctx.arc(puntosGraf[0].x, puntosGraf[0].y, 3, 0, 2 * Math.PI); ctx.fill(); }
+    // Eje de tiempo: inicio y fin, hora local
+    const fmt = (t) => fmtLocal.format(new Date(t)).slice(0, 5);
+    ctx.fillStyle = "#9aa7b4"; ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left"; ctx.fillText(fmt(t0), izq, Hc - 3);
+    ctx.textAlign = "right"; ctx.fillText(fmt(t1), izq + pw, Hc - 3);
+    ctx.textAlign = "left";
+    // Cruz y lectura del punto más cercano
+    const lect = $("graf-lectura");
+    if (hover != null && puntosGraf.length) {
+      let p = puntosGraf[0];
+      for (const q of puntosGraf) if (Math.abs(q.x - hover) < Math.abs(p.x - hover)) p = q;
+      ctx.strokeStyle = "rgba(230, 237, 243, 0.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(Math.round(p.x) + 0.5, arr); ctx.lineTo(Math.round(p.x) + 0.5, arr + ph); ctx.stroke();
+      ctx.fillStyle = "#f4a261"; ctx.strokeStyle = "#0f1419"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+      const t = new Date(p.s.t);
+      lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · índice " + p.s.indice.toFixed(2) + " %" +
+        (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "");
+    } else {
+      const u = ms[ms.length - 1];
+      lect.textContent = "Última: " + fmtLocal.format(new Date(u.t)) + " · " + u.indice.toFixed(2) + " % · " + ms.length + " muestras en 6 h";
+    }
   }
+  grafico.addEventListener("mousemove", (ev) => dibujarGrafico(ev.clientX - grafico.getBoundingClientRect().left));
+  grafico.addEventListener("mouseleave", () => dibujarGrafico());
+  window.addEventListener("resize", () => dibujarGrafico());
 
   // ---------- Overlay (escala, marcador, ROI) ----------
   const NS = "http://www.w3.org/2000/svg";
@@ -477,19 +526,24 @@
     const c = estado.calib, H = refH();
     overlay.setAttribute("viewBox", "0 0 " + REF_W + " " + H);
     overlay.innerHTML = "";
-    const g = el("g", { "font-family": "system-ui, sans-serif", "font-size": 15, "fill": "#fff",
-      "stroke-linecap": "round", "paint-order": "stroke", "stroke": "rgba(0,0,0,0.75)", "stroke-width": 3 });
+    // Escala sutil: líneas finas y semitransparentes con un halo oscuro leve
+    // para que se lea sobre nieve o cielo sin tapar la columna.
+    const g = el("g", { "font-family": "system-ui, sans-serif", "font-size": 13, "fill": "rgba(255,255,255,0.78)",
+      "stroke-linecap": "round", "paint-order": "stroke", "stroke": "rgba(0,0,0,0.45)", "stroke-width": 2.5 });
     const yTop = yDesdeAltura(c.alturaMax);
-    g.appendChild(el("line", { x1: c.x, y1: c.y0, x2: c.x, y2: yTop, stroke: "rgba(0,0,0,0.6)", "stroke-width": 5 }));
-    g.appendChild(el("line", { x1: c.x, y1: c.y0, x2: c.x, y2: yTop, stroke: "#fff", "stroke-width": 2 }));
+    const linea = (x1, y1, x2, y2, w) => {
+      g.appendChild(el("line", { x1, y1, x2, y2, stroke: "rgba(0,0,0,0.3)", "stroke-width": w + 1.5 }));
+      g.appendChild(el("line", { x1, y1, x2, y2, stroke: "rgba(255,255,255,0.7)", "stroke-width": w }));
+    };
+    linea(c.x, c.y0, c.x, yTop, 1.2);
     for (let h = 0; h <= c.alturaMax + 1e-6; h += 100) {
       const y = yDesdeAltura(h);
-      g.appendChild(el("line", { x1: c.x - 12, y1: y, x2: c.x + 12, y2: y, stroke: "#fff", "stroke-width": 2 }));
-      g.appendChild(el("text", { x: c.x + 18, y: y + 5 }, String(h)));
+      linea(c.x - 7, y, c.x + 7, y, 1.2);
+      g.appendChild(el("text", { x: c.x + 11, y: y + 4.5 }, String(h)));
     }
     for (let h = 50; h < c.alturaMax; h += 100) {
       const y = yDesdeAltura(h);
-      g.appendChild(el("line", { x1: c.x - 6, y1: y, x2: c.x + 6, y2: y, stroke: "#fff", "stroke-width": 1.5 }));
+      linea(c.x - 3.5, y, c.x + 3.5, y, 1);
     }
     overlay.appendChild(g);
 
@@ -508,8 +562,10 @@
     // ROI y manijas en modo calibrar
     const r = estado.roi;
     if (estado.modoUi === "calibrar" || estado.ajustes.muestreo) {
-      overlay.appendChild(el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "rgba(229,83,61,0.12)", stroke: "#e5533d",
-        "stroke-width": 1.5, "stroke-dasharray": "5 4", class: estado.modoUi === "calibrar" ? "arrastrable" : "", "data-manija": "roi" }));
+      // Solo el borde; en modo Calibrar el interior sigue siendo arrastrable.
+      overlay.appendChild(el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "none", stroke: "#e5533d",
+        "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": estado.modoUi === "calibrar" ? "all" : "none",
+        class: estado.modoUi === "calibrar" ? "arrastrable" : "", "data-manija": "roi" }));
     }
     if (estado.modoUi === "calibrar") {
       overlay.appendChild(el("circle", { cx: c.x, cy: c.y0, r: 10, fill: "#4cc9f0", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "base" }));
@@ -592,12 +648,13 @@
     const trazo = (x1, y1, x2, y2, ancho, color) => { ctx.strokeStyle = color; ctx.lineWidth = ancho; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
     const texto = (t, x, y, color) => { ctx.lineWidth = 4 * f; ctx.strokeStyle = "rgba(0,0,0,0.8)"; ctx.strokeText(t, x, y); ctx.fillStyle = color || "#fff"; ctx.fillText(t, x, y); };
     const yTop = yDesdeAltura(cal.alturaMax);
-    trazo(px(cal.x), px(cal.y0), px(cal.x), px(yTop), 5 * f, "rgba(0,0,0,0.6)");
-    trazo(px(cal.x), px(cal.y0), px(cal.x), px(yTop), 2 * f, "#fff");
+    trazo(px(cal.x), px(cal.y0), px(cal.x), px(yTop), 2.7 * f, "rgba(0,0,0,0.3)");
+    trazo(px(cal.x), px(cal.y0), px(cal.x), px(yTop), 1.2 * f, "rgba(255,255,255,0.7)");
     for (let hh = 0; hh <= cal.alturaMax + 1e-6; hh += 100) {
       const y = px(yDesdeAltura(hh));
-      trazo(px(cal.x) - 12 * f, y, px(cal.x) + 12 * f, y, 2 * f, "#fff");
-      texto(String(hh), px(cal.x) + 18 * f, y);
+      trazo(px(cal.x) - 7 * f, y, px(cal.x) + 7 * f, y, 2.7 * f, "rgba(0,0,0,0.3)");
+      trazo(px(cal.x) - 7 * f, y, px(cal.x) + 7 * f, y, 1.2 * f, "rgba(255,255,255,0.7)");
+      texto(String(hh), px(cal.x) + 11 * f, y, "rgba(255,255,255,0.85)");
     }
     if (estado.marcadorY != null) {
       const y = px(estado.marcadorY);
@@ -666,7 +723,7 @@
     const a = estado.ajustes;
     $("in-alias").value = a.alias; $("in-modo").value = a.modo; $("in-hls").value = a.hlsUrl; $("in-snap").value = a.snapshotUrl;
     $("in-int-snap").value = a.intervaloSnapshot; $("n-int").value = a.intervaloMuestreo; $("n-umbral").value = a.umbral;
-    $("n-muestreo").checked = !!a.muestreo; $("n-brillo-umbral").value = a.umbralBrillo; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
+    $("n-muestreo").checked = $("n-muestreo-ins").checked = !!a.muestreo; $("n-brillo-umbral").value = a.umbralBrillo; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
   }
   function leerFuente() {
     const a = estado.ajustes;
@@ -699,8 +756,9 @@
     a.umbralBrillo = Math.min(255, Math.max(1, +$("n-brillo-umbral").value || 200));
     guardar(LS.ajustes, a); aplicarFiltro(); dibujarOverlay();
   };
-  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); }));
-  $("n-muestreo").addEventListener("change", () => { guardarNoche(); reprogramarMuestreo(); });
+  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); dibujarGrafico(); }));
+  $("n-muestreo").addEventListener("change", () => { $("n-muestreo-ins").checked = $("n-muestreo").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
+  $("n-muestreo-ins").addEventListener("change", () => { $("n-muestreo").checked = $("n-muestreo-ins").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
   $("btn-noche").addEventListener("click", () => { $("n-brillo").value = 2.2; $("n-contraste").value = 1.4; guardarNoche(); });
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
@@ -709,7 +767,7 @@
     $("inserto").hidden = !ver;
     $("btn-inserto").classList.toggle("activo", ver);
     estado.ajustes.inserto = ver; guardar(LS.ajustes, estado.ajustes);
-    if (ver) actualizarInserto();
+    if (ver) { actualizarInserto(); dibujarGrafico(); }
   }
   $("btn-inserto").addEventListener("click", () => mostrarInserto($("inserto").hidden));
   $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));

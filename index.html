@@ -60,6 +60,14 @@
       </figure>
     </div>
     <p class="inserto-info" id="roi-info">Sin imagen</p>
+    <div class="inserto-graf">
+      <div class="inserto-graf-cab">
+        <span>Índice en el tiempo (%)</span>
+        <label class="fila chica"><input id="n-muestreo-ins" type="checkbox"> registrar</label>
+      </div>
+      <canvas id="grafico" class="grafico" aria-label="Índice de incandescencia en el tiempo"></canvas>
+      <p class="graf-lectura" id="graf-lectura"></p>
+    </div>
   </section>
 
   <p class="estado" id="estado">Sin fuente.</p>
@@ -123,7 +131,6 @@
         <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
         <label>Umbral de brillo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
         <div class="indice" id="indice">Índice: <strong>--</strong></div>
-        <canvas id="grafico" class="grafico" width="800" height="160" aria-label="Índice de incandescencia en el tiempo"></canvas>
         <div class="acciones">
           <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
           <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
