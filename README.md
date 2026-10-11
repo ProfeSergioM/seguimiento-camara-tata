@@ -70,7 +70,7 @@ La cámara entrega cuadros de 1920 × 1080 px con un lente gran angular. La cali
 
 La escala original se dibujó sobre una captura de pantalla de 1393 × 667 px (`docs/calibracion_preliminar.jpg`), con 0 m en la fila 380.5 y 47.5 px entre marcas. Esa captura resultó ser un recorte del cuadro nativo con la dimensión vertical comprimida. Para trasladar la escala se emparejaron 228 puntos homólogos entre la captura y un snapshot nativo (`docs/snapshot_plazatata_1920x1080.jpg`) y se ajustó una transformación afín. El ajuste da una escala horizontal de 1.004, una escala vertical de 1.139, rotación nula y un residuo mediano de 0.43 px. El resultado sobre el cuadro nativo está en `docs/calibracion_cuadro_nativo.jpg`.
 
-La separación de 54.1 px por 100 m conserva la escala tal como se dibujó sobre el paisaje. Si los 47.5 px por 100 m originales se calcularon a partir de la geometría de la cámara, y no midiendo sobre la captura, el valor correcto en el cuadro nativo sería 47.5 y las alturas actuales estarían sobrestimadas en un 14 %.
+Los 47.5 px por 100 m originales se midieron directamente sobre la captura. Por eso la escala debe acompañar al paisaje al trasladarse, y en el cuadro nativo corresponde a 54.1 px por 100 m.
 
 ### Supuestos y limitaciones
 
