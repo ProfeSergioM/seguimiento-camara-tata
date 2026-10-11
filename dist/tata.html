@@ -65,6 +65,25 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .estado { position: fixed; left: 12px; bottom: 10px; z-index: 10; margin: 0; max-width: calc(100vw - 24px); padding: 4px 8px; border-radius: 6px;
   background: var(--vidrio); color: var(--texto-suave); font-size: 0.8rem; transition: opacity 0.3s; }
 
+/* ---------- Recuadro de la zona de detección ---------- */
+.inserto { position: fixed; left: 12px; bottom: 44px; z-index: 10; padding: 8px 10px 8px; border-radius: var(--radio);
+  background: var(--vidrio); border: 1px solid var(--borde); backdrop-filter: blur(4px); max-width: calc(100vw - 24px); }
+.inserto[hidden] { display: none; }
+.inserto.alerta { border-color: var(--peligro); box-shadow: 0 0 0 1px var(--peligro); }
+.inserto-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+.inserto-vistas { display: flex; gap: 8px; }
+.inserto figure { margin: 0; }
+.inserto canvas { display: block; width: clamp(140px, 13vw, 300px); height: auto; image-rendering: pixelated; border: 1px solid var(--borde);
+  background: #111; }
+.inserto figcaption { font-size: 0.75rem; color: var(--texto-suave); margin-top: 3px; display: flex; align-items: center; gap: 4px; }
+.muestra { display: inline-block; width: 10px; height: 10px; border: 1px solid #000; }
+.muestra.rojizo { background: rgb(255, 212, 0); }
+.muestra.brillante { background: rgb(0, 229, 255); margin-left: 6px; }
+.inserto-info { margin: 6px 0 0; font-size: 0.8rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.inserto-info strong { color: var(--acento-2); }
+.inserto.alerta .inserto-info strong { color: var(--peligro); }
+.boton.icono.chico { min-width: 26px; padding: 3px 6px; font-size: 0.8rem; }
+
 /* ---------- Botones y formularios ---------- */
 .boton { background: rgba(23, 29, 36, 0.85); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); padding: 7px 12px;
   font: inherit; font-size: 0.92rem; cursor: pointer; }
@@ -104,6 +123,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pie { color: var(--texto-suave); font-size: 0.8rem; margin-top: 16px; }
 
 @media (max-width: 760px) {
+  .inserto canvas { width: calc((100vw - 60px) / 2); }
   .barra-sup { gap: 6px 8px; padding: 6px 8px 10px; }
   .titulo { width: 100%; }
   .lectura { margin: 0; }
@@ -136,6 +156,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="grupo">
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
+      <button class="boton" id="btn-inserto" title="Mostrar u ocultar la zona de detección (tecla Z)">Zona</button>
       <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
       <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
     </div>
@@ -144,6 +165,24 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div><span class="etq">UTC</span> <span id="reloj-utc">--:--:--</span></div>
     </div>
   </header>
+
+  <section class="inserto" id="inserto" aria-label="Zona de detección de incandescencia">
+    <div class="inserto-cab">
+      <strong>Zona de detección</strong>
+      <button class="boton icono chico" id="btn-cerrar-inserto" aria-label="Ocultar recuadro" title="Ocultar (tecla Z)">✕</button>
+    </div>
+    <div class="inserto-vistas">
+      <figure>
+        <canvas id="roi-zoom" aria-label="Ampliación de la zona de detección"></canvas>
+        <figcaption>Imagen ampliada</figcaption>
+      </figure>
+      <figure>
+        <canvas id="roi-mascara" aria-label="Píxeles detectados como incandescentes"></canvas>
+        <figcaption><span class="muestra rojizo"></span>rojizo <span class="muestra brillante"></span>brillante</figcaption>
+      </figure>
+    </div>
+    <p class="inserto-info" id="roi-info">Sin imagen</p>
+  </section>
 
   <p class="estado" id="estado">Sin fuente.</p>
 </main>
@@ -204,13 +243,14 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
         <label class="fila"><input id="n-muestreo" type="checkbox"> Muestrear índice de incandescencia automáticamente</label>
         <label>Intervalo de muestreo (s) <input id="n-int" type="number" min="2" step="1"></label>
         <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
+        <label>Umbral de brillo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
         <div class="indice" id="indice">Índice: <strong>--</strong></div>
         <canvas id="grafico" class="grafico" width="800" height="160" aria-label="Índice de incandescencia en el tiempo"></canvas>
         <div class="acciones">
           <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
           <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
         </div>
-        <p class="nota">El índice es el porcentaje de píxeles rojizos o saturados dentro de la ROI sobre el cráter. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
+        <p class="nota">El índice es el porcentaje de píxeles rojizos o brillantes dentro de la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el criterio de brillo. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
       </div>
     </details>
 
@@ -242,7 +282,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, F pantalla completa, Esc cerrar este panel.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z zona de detección, F pantalla completa, Esc cerrar este panel.</p>
   </footer>
 </aside>
 
@@ -297,6 +337,11 @@ window.CAM_CONFIG = {
   // ROI) a partir del cual se marca actividad.
   umbralIncandescencia: 2,
 
+  // Luminancia (0 a 255) desde la cual un píxel cuenta como brillante.
+  // De noche la cámara transmite en blanco y negro, por lo que este es el
+  // criterio que detecta la incandescencia. Valor provisional.
+  umbralBrillo: 200,
+
   // Segundos entre muestras del índice de incandescencia.
   intervaloMuestreo: 10,
 
@@ -315,7 +360,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 d";
+  const VERSION = "2026-10-11 f";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -337,6 +382,7 @@ window.CAM_CONFIG = {
       intervaloSnapshot: CFG.intervaloSnapshot || 10,
       intervaloMuestreo: CFG.intervaloMuestreo || 10,
       umbral: CFG.umbralIncandescencia != null ? CFG.umbralIncandescencia : 2,
+      umbralBrillo: CFG.umbralBrillo != null ? CFG.umbralBrillo : 200,
       muestreo: false,
       brillo: 1,
       contraste: 1
@@ -514,6 +560,7 @@ window.CAM_CONFIG = {
       fijarAspecto(img.naturalWidth, img.naturalHeight);
       estado.ultimoCuadro = new Date();
       if (estado.pixelesOk === null) probarPixeles();
+      actualizarInserto();
       setEstado((estado.mensajeRespaldo ? estado.mensajeRespaldo + " · " : "") + "Snapshot " + img.naturalWidth + "×" + img.naturalHeight + " · último cuadro " + horaLocal(estado.ultimoCuadro) +
         (estado.pixelesOk ? " · análisis de píxeles disponible" : " · sin acceso a píxeles (CORS)"));
     });
@@ -607,45 +654,129 @@ window.CAM_CONFIG = {
     if (!estado.pixelesOk) setEstado(estadoEl.textContent + " · sin acceso a píxeles (CORS)");
   }
 
-  // Índice de incandescencia: % de píxeles rojizos o saturados en la ROI.
-  function calcularIndice() {
-    if (!estado.pixelesOk) return null;
-    const c = dibujarCuadro();
-    if (!c) return null;
-    const f = c.w / REF_W;
-    const r = estado.roi;
-    const x = Math.max(0, Math.round(r.x * f)), y = Math.max(0, Math.round(r.y * f));
-    const w = Math.min(c.w - x, Math.round(r.w * f)), h = Math.min(c.h - y, Math.round(r.h * f));
-    if (w <= 0 || h <= 0) return null;
-    let datos;
-    try { datos = c.ctx.getImageData(x, y, w, h).data; } catch (e) { estado.pixelesOk = false; return null; }
-    let calientes = 0, lumRoi = 0;
-    for (let i = 0; i < datos.length; i += 4) {
-      const R = datos[i], G = datos[i + 1], B = datos[i + 2];
-      lumRoi += 0.299 * R + 0.587 * G + 0.114 * B;
-      if ((R >= 140 && R > G * 1.25 && R > B * 1.6) || (R >= 250 && G >= 200)) calientes++;
-    }
-    const n = datos.length / 4;
-    // Luminancia media de todo el cuadro para distinguir noche de día.
-    let lumCuadro = null;
-    try {
-      const paso = Math.max(1, Math.floor(c.w / 160));
-      const d2 = c.ctx.getImageData(0, 0, c.w, c.h).data;
-      let s = 0, k = 0;
-      for (let yy = 0; yy < c.h; yy += paso) for (let xx = 0; xx < c.w; xx += paso) {
-        const i = (yy * c.w + xx) * 4; s += 0.299 * d2[i] + 0.587 * d2[i + 1] + 0.114 * d2[i + 2]; k++;
-      }
-      lumCuadro = s / k;
-    } catch (e) {}
-    return { indice: 100 * calientes / n, lumRoi: lumRoi / n, lumCuadro };
+  // Clasificación de un píxel de la ROI:
+  //   1 rojizo    : brillante y con dominante roja (resplandor anaranjado).
+  //                 Solo puede ocurrir cuando la cámara transmite en color.
+  //   2 brillante : luminancia sobre el umbral de brillo. De noche la cámara
+  //                 pasa a blanco y negro, y este es el criterio que cuenta.
+  //   0 resto
+  // El índice de incandescencia es el porcentaje de píxeles de clase 1 o 2.
+  function clasePixel(R, G, B, umbralBrillo) {
+    if (R >= 140 && R > G * 1.25 && R > B * 1.6) return 1;
+    if (0.299 * R + 0.587 * G + 0.114 * B >= umbralBrillo) return 2;
+    return 0;
   }
+
+  // Rectángulo de la ROI en píxeles del cuadro real.
+  function roiEnCuadro() {
+    const m = estado.media;
+    if (!m || estado.tipoMedia === "iframe") return null;
+    const W = estado.tipoMedia === "video" ? m.videoWidth : m.naturalWidth;
+    const H = estado.tipoMedia === "video" ? m.videoHeight : m.naturalHeight;
+    if (!W || !H) return null;
+    const f = W / REF_W, r = estado.roi;
+    const x = Math.max(0, Math.round(r.x * f)), y = Math.max(0, Math.round(r.y * f));
+    const w = Math.min(W - x, Math.round(r.w * f)), h = Math.min(H - y, Math.round(r.h * f));
+    return w > 0 && h > 0 ? { m, W, H, x, y, w, h } : null;
+  }
+
+  // Lienzos pequeños reutilizables: solo se copia la ROI y una versión
+  // reducida del cuadro, en vez de leer el cuadro completo.
+  const lienzoRoi = document.createElement("canvas");
+  const lienzoMini = document.createElement("canvas");
+  function leerRoi(z) {
+    lienzoRoi.width = z.w; lienzoRoi.height = z.h;
+    const ctx = lienzoRoi.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(z.m, z.x, z.y, z.w, z.h, 0, 0, z.w, z.h);
+    return ctx.getImageData(0, 0, z.w, z.h);
+  }
+
+  function analizarRoi() {
+    if (!estado.pixelesOk) return null;
+    const z = roiEnCuadro();
+    if (!z) return null;
+    let img;
+    try { img = leerRoi(z); } catch (e) { estado.pixelesOk = false; return null; }
+    const d = img.data, n = d.length / 4;
+    const clases = new Uint8Array(n);
+    const ub = estado.ajustes.umbralBrillo;
+    let rojizos = 0, brillantes = 0, lum = 0;
+    for (let i = 0, p = 0; p < n; i += 4, p++) {
+      const R = d[i], G = d[i + 1], B = d[i + 2];
+      lum += 0.299 * R + 0.587 * G + 0.114 * B;
+      const c = clasePixel(R, G, B, ub);
+      clases[p] = c;
+      if (c === 1) rojizos++; else if (c === 2) brillantes++;
+    }
+    return { z, img, clases, n, rojizos, brillantes, indice: 100 * (rojizos + brillantes) / n, lumRoi: lum / n };
+  }
+
+  // Luminancia media del cuadro, sobre una copia reducida, para distinguir noche de día.
+  function luminanciaCuadro(z) {
+    try {
+      const w = 160, h = Math.max(1, Math.round(160 * z.H / z.W));
+      lienzoMini.width = w; lienzoMini.height = h;
+      const ctx = lienzoMini.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(z.m, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      return s / (d.length / 4);
+    } catch (e) { return null; }
+  }
+
+  function calcularIndice() {
+    const a = analizarRoi();
+    if (!a) return null;
+    return { indice: a.indice, lumRoi: a.lumRoi, lumCuadro: luminanciaCuadro(a.z), rojizos: a.rojizos, brillantes: a.brillantes };
+  }
+
+  // ---------- Recuadro de la ROI: ampliación y máscara ----------
+  const COLOR_ROJIZO = [255, 212, 0];     // amarillo: clase 1
+  const COLOR_BRILLANTE = [0, 229, 255];  // cian: clase 2
+  function actualizarInserto() {
+    const caja = $("inserto");
+    if (caja.hidden) return;
+    const zoom = $("roi-zoom"), mascara = $("roi-mascara"), info = $("roi-info");
+    const z = roiEnCuadro();
+    if (!z) { info.textContent = estado.tipoMedia === "iframe" ? "No disponible en modo iframe" : "Sin imagen"; return; }
+    // Ampliación: se dibuja aunque no haya acceso a píxeles.
+    for (const cv of [zoom, mascara]) { cv.width = z.w; cv.height = z.h; }
+    const cz = zoom.getContext("2d");
+    const a = estado.ajustes;
+    cz.filter = (a.brillo !== 1 || a.contraste !== 1) ? "brightness(" + a.brillo + ") contrast(" + a.contraste + ")" : "none";
+    cz.drawImage(z.m, z.x, z.y, z.w, z.h, 0, 0, z.w, z.h);
+    const cm = mascara.getContext("2d");
+    const r = analizarRoi();
+    if (!r) {
+      cm.fillStyle = "#111"; cm.fillRect(0, 0, z.w, z.h);
+      info.textContent = "Máscara no disponible: sin acceso a píxeles (CORS)";
+      return;
+    }
+    // Máscara: fondo en gris atenuado y píxeles detectados en color.
+    const out = cm.createImageData(z.w, z.h), d = r.img.data, o = out.data;
+    for (let i = 0, p = 0; p < r.n; i += 4, p++) {
+      const c = r.clases[p];
+      if (c === 1) { o[i] = COLOR_ROJIZO[0]; o[i + 1] = COLOR_ROJIZO[1]; o[i + 2] = COLOR_ROJIZO[2]; }
+      else if (c === 2) { o[i] = COLOR_BRILLANTE[0]; o[i + 1] = COLOR_BRILLANTE[1]; o[i + 2] = COLOR_BRILLANTE[2]; }
+      else { const g = 0.4 * (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]); o[i] = o[i + 1] = o[i + 2] = g; }
+      o[i + 3] = 255;
+    }
+    cm.putImageData(out, 0, 0);
+    const alerta = r.indice >= estado.ajustes.umbral;
+    caja.classList.toggle("alerta", alerta);
+    info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · rojizos " + r.rojizos + " · brillantes " + r.brillantes +
+      " de " + r.n + " px" + (alerta ? " · <strong>INCANDESCENCIA</strong>" : "");
+  }
+  setInterval(actualizarInserto, 1000);
 
   function muestrear() {
     const m = calcularIndice();
     if (!m) { indiceEl.innerHTML = "Índice: <strong>no disponible</strong>"; return; }
     estado.ultimoIndice = m.indice;
     const t = new Date();
-    estado.muestras.push({ t: t.toISOString(), indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null });
+    estado.muestras.push({ t: t.toISOString(), indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null,
+      rojizos: m.rojizos, brillantes: m.brillantes, umbralBrillo: estado.ajustes.umbralBrillo });
     if (estado.muestras.length > 5000) estado.muestras.splice(0, estado.muestras.length - 5000);
     guardar(LS.muestras, estado.muestras);
     const alerta = m.indice >= estado.ajustes.umbral;
@@ -788,6 +919,7 @@ window.CAM_CONFIG = {
       estado.roi.w = Math.max(10, r0.w + dx); estado.roi.h = Math.max(10, r0.h + dy);
     }
     dibujarOverlay(); llenarCalib();
+    if (arrastre.tipo.startsWith("roi") || arrastre.tipo === "base") actualizarInserto();
   });
   const soltar = () => {
     if (!arrastre) return;
@@ -879,8 +1011,8 @@ window.CAM_CONFIG = {
     if (confirm("¿Borrar todo el registro de observaciones de este navegador?")) { estado.registro = []; guardar(LS.registro, []); renderRegistro(); }
   });
   $("btn-exp-muestras").addEventListener("click", () => {
-    descargarCsv("muestras_incandescencia.csv", [["fecha_hora_local", "iso_utc", "indice_pct", "lum_roi", "lum_cuadro"]]
-      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.indice, s.lumRoi, s.lumCuadro])));
+    descargarCsv("muestras_incandescencia.csv", [["fecha_hora_local", "iso_utc", "indice_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo"]]
+      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo])));
   });
   $("btn-borrar-muestras").addEventListener("click", () => {
     if (confirm("¿Borrar las muestras del índice de incandescencia?")) { estado.muestras = []; guardar(LS.muestras, []); dibujarGrafico(); }
@@ -891,7 +1023,7 @@ window.CAM_CONFIG = {
     const a = estado.ajustes;
     $("in-alias").value = a.alias; $("in-modo").value = a.modo; $("in-hls").value = a.hlsUrl; $("in-snap").value = a.snapshotUrl;
     $("in-int-snap").value = a.intervaloSnapshot; $("n-int").value = a.intervaloMuestreo; $("n-umbral").value = a.umbral;
-    $("n-muestreo").checked = !!a.muestreo; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
+    $("n-muestreo").checked = !!a.muestreo; $("n-brillo-umbral").value = a.umbralBrillo; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
   }
   function leerFuente() {
     const a = estado.ajustes;
@@ -921,13 +1053,23 @@ window.CAM_CONFIG = {
     const a = estado.ajustes;
     a.brillo = +$("n-brillo").value; a.contraste = +$("n-contraste").value; a.muestreo = $("n-muestreo").checked;
     a.intervaloMuestreo = +$("n-int").value || 10; a.umbral = +$("n-umbral").value || 0;
+    a.umbralBrillo = Math.min(255, Math.max(1, +$("n-brillo-umbral").value || 200));
     guardar(LS.ajustes, a); aplicarFiltro(); dibujarOverlay();
   };
-  ["n-brillo", "n-contraste", "n-int", "n-umbral"].forEach(id => $(id).addEventListener("input", guardarNoche));
+  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); }));
   $("n-muestreo").addEventListener("change", () => { guardarNoche(); reprogramarMuestreo(); });
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
   $("btn-noche").addEventListener("click", () => { $("n-brillo").value = 2.2; $("n-contraste").value = 1.4; guardarNoche(); });
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
+
+  function mostrarInserto(ver) {
+    $("inserto").hidden = !ver;
+    $("btn-inserto").classList.toggle("activo", ver);
+    estado.ajustes.inserto = ver; guardar(LS.ajustes, estado.ajustes);
+    if (ver) actualizarInserto();
+  }
+  $("btn-inserto").addEventListener("click", () => mostrarInserto($("inserto").hidden));
+  $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));
 
   // ---------- Barra superior, panel lateral y pantalla completa ----------
   document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
@@ -973,10 +1115,12 @@ window.CAM_CONFIG = {
     else if (k === "m") fijarModoUi("medir");
     else if (k === "c") fijarModoUi("calibrar");
     else if (k === "f") pantallaCompleta();
+    else if (k === "z") mostrarInserto($("inserto").hidden);
   });
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;
+  mostrarInserto(estado.ajustes.inserto !== false);
   console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);

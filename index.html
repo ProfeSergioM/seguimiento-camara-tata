@@ -34,6 +34,7 @@
     <div class="grupo">
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
+      <button class="boton" id="btn-inserto" title="Mostrar u ocultar la zona de detección (tecla Z)">Zona</button>
       <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
       <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
     </div>
@@ -42,6 +43,24 @@
       <div><span class="etq">UTC</span> <span id="reloj-utc">--:--:--</span></div>
     </div>
   </header>
+
+  <section class="inserto" id="inserto" aria-label="Zona de detección de incandescencia">
+    <div class="inserto-cab">
+      <strong>Zona de detección</strong>
+      <button class="boton icono chico" id="btn-cerrar-inserto" aria-label="Ocultar recuadro" title="Ocultar (tecla Z)">✕</button>
+    </div>
+    <div class="inserto-vistas">
+      <figure>
+        <canvas id="roi-zoom" aria-label="Ampliación de la zona de detección"></canvas>
+        <figcaption>Imagen ampliada</figcaption>
+      </figure>
+      <figure>
+        <canvas id="roi-mascara" aria-label="Píxeles detectados como incandescentes"></canvas>
+        <figcaption><span class="muestra rojizo"></span>rojizo <span class="muestra brillante"></span>brillante</figcaption>
+      </figure>
+    </div>
+    <p class="inserto-info" id="roi-info">Sin imagen</p>
+  </section>
 
   <p class="estado" id="estado">Sin fuente.</p>
 </main>
@@ -102,13 +121,14 @@
         <label class="fila"><input id="n-muestreo" type="checkbox"> Muestrear índice de incandescencia automáticamente</label>
         <label>Intervalo de muestreo (s) <input id="n-int" type="number" min="2" step="1"></label>
         <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
+        <label>Umbral de brillo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
         <div class="indice" id="indice">Índice: <strong>--</strong></div>
         <canvas id="grafico" class="grafico" width="800" height="160" aria-label="Índice de incandescencia en el tiempo"></canvas>
         <div class="acciones">
           <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
           <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
         </div>
-        <p class="nota">El índice es el porcentaje de píxeles rojizos o saturados dentro de la ROI sobre el cráter. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
+        <p class="nota">El índice es el porcentaje de píxeles rojizos o brillantes dentro de la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el criterio de brillo. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
       </div>
     </details>
 
@@ -140,7 +160,7 @@
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, F pantalla completa, Esc cerrar este panel.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z zona de detección, F pantalla completa, Esc cerrar este panel.</p>
   </footer>
 </aside>
 

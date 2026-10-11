@@ -53,6 +53,25 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .estado { position: fixed; left: 12px; bottom: 10px; z-index: 10; margin: 0; max-width: calc(100vw - 24px); padding: 4px 8px; border-radius: 6px;
   background: var(--vidrio); color: var(--texto-suave); font-size: 0.8rem; transition: opacity 0.3s; }
 
+/* ---------- Recuadro de la zona de detección ---------- */
+.inserto { position: fixed; left: 12px; bottom: 44px; z-index: 10; padding: 8px 10px 8px; border-radius: var(--radio);
+  background: var(--vidrio); border: 1px solid var(--borde); backdrop-filter: blur(4px); max-width: calc(100vw - 24px); }
+.inserto[hidden] { display: none; }
+.inserto.alerta { border-color: var(--peligro); box-shadow: 0 0 0 1px var(--peligro); }
+.inserto-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+.inserto-vistas { display: flex; gap: 8px; }
+.inserto figure { margin: 0; }
+.inserto canvas { display: block; width: clamp(140px, 13vw, 300px); height: auto; image-rendering: pixelated; border: 1px solid var(--borde);
+  background: #111; }
+.inserto figcaption { font-size: 0.75rem; color: var(--texto-suave); margin-top: 3px; display: flex; align-items: center; gap: 4px; }
+.muestra { display: inline-block; width: 10px; height: 10px; border: 1px solid #000; }
+.muestra.rojizo { background: rgb(255, 212, 0); }
+.muestra.brillante { background: rgb(0, 229, 255); margin-left: 6px; }
+.inserto-info { margin: 6px 0 0; font-size: 0.8rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
+.inserto-info strong { color: var(--acento-2); }
+.inserto.alerta .inserto-info strong { color: var(--peligro); }
+.boton.icono.chico { min-width: 26px; padding: 3px 6px; font-size: 0.8rem; }
+
 /* ---------- Botones y formularios ---------- */
 .boton { background: rgba(23, 29, 36, 0.85); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); padding: 7px 12px;
   font: inherit; font-size: 0.92rem; cursor: pointer; }
@@ -92,6 +111,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .pie { color: var(--texto-suave); font-size: 0.8rem; margin-top: 16px; }
 
 @media (max-width: 760px) {
+  .inserto canvas { width: calc((100vw - 60px) / 2); }
   .barra-sup { gap: 6px 8px; padding: 6px 8px 10px; }
   .titulo { width: 100%; }
   .lectura { margin: 0; }

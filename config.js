@@ -42,6 +42,11 @@ window.CAM_CONFIG = {
   // ROI) a partir del cual se marca actividad.
   umbralIncandescencia: 2,
 
+  // Luminancia (0 a 255) desde la cual un píxel cuenta como brillante.
+  // De noche la cámara transmite en blanco y negro, por lo que este es el
+  // criterio que detecta la incandescencia. Valor provisional.
+  umbralBrillo: 200,
+
   // Segundos entre muestras del índice de incandescencia.
   intervaloMuestreo: 10,
 

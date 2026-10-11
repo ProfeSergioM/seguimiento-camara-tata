@@ -8,7 +8,8 @@ El sitio no necesita servidor ni compilación. Se puede publicar en GitHub Pages
 
 - Muestra la cámara en vivo con una escala vertical calibrada sobre el cráter: 0 m en la cumbre y marcas cada 100 m hasta 500 m.
 - Permite medir la altura de la columna con un clic o arrastre sobre el video y registrar la observación con hora local de Chile.
-- Calcula un índice de incandescencia nocturna, definido como el porcentaje de píxeles rojizos o saturados dentro de una región de interés sobre el cráter, y lo grafica en el tiempo.
+- Calcula un índice de incandescencia nocturna, definido como el porcentaje de píxeles rojizos o brillantes dentro de una región de interés sobre el cráter, y lo grafica en el tiempo.
+- Muestra abajo a la izquierda una ampliación de la región de interés y una máscara con los píxeles detectados: amarillo para rojizos y cian para brillantes.
 - Ofrece realce de brillo y contraste para observación nocturna.
 - Guarda la calibración, el registro de observaciones y las muestras del índice en el navegador y las exporta a CSV.
 - Exporta capturas PNG con la escala, el marcador de altura y la hora impresos sobre el cuadro.
@@ -59,13 +60,15 @@ La cámara ocupa toda la ventana. Encima de la imagen hay una barra con los cont
 - **☰**: abre el panel lateral con la fuente, la calibración, el índice de incandescencia y el registro.
 - **Relojes**: hora local de Chile y hora UTC.
 
-Atajos de teclado: V ver, M medir, C calibrar, F pantalla completa y Esc para cerrar el panel lateral.
+Atajos de teclado: V ver, M medir, C calibrar, Z zona de detección, F pantalla completa y Esc para cerrar el panel lateral.
 
 Detalle de cada modo:
 
 - **Ver**: la imagen no responde al mouse. En modo iframe se pueden usar los controles del reproductor.
 - **Medir**: un clic o arrastre sobre la imagen coloca una línea horizontal y muestra la altura sobre la cumbre, redondeada a 10 m. Registrar guarda la hora, el tipo de actividad, la altura, el índice de incandescencia y una nota.
 - **Calibrar**: aparecen tres manijas. El punto celeste (0 m) se arrastra hasta la cumbre, el punto verde (500 m) fija la escala y el rectángulo rojo es la región de interés para incandescencia. También se pueden escribir los valores en el panel Calibración.
+- **Zona**: muestra u oculta el recuadro de la región de interés, también con la tecla Z. La máscara permite ver qué píxeles cuentan para el índice y ajustar el umbral de brillo.
+- **Criterios del índice**: un píxel cuenta si es rojizo, es decir brillante y con dominante roja, o si su luminancia supera el umbral de brillo, que por defecto es 200 en una escala de 0 a 255. De noche la cámara transmite en blanco y negro, así que solo actúa el criterio de brillo. De día, la nieve muy iluminada puede superar el umbral; la luminancia del cuadro, registrada en cada muestra, permite separar día y noche.
 - **Noche**: en el panel lateral se activa el muestreo automático para calcular el índice cada N segundos. Cuando supera el umbral, la lectura se marca en rojo. Los presets de brillo y contraste solo afectan la visualización, no el análisis.
 
 ## Calibración preliminar
@@ -102,7 +105,7 @@ pip install pillow
 python3 scripts/monitor.py --alias plazatata --intervalo 5 --salida datos
 ```
 
-Opciones principales: `--modo hls` usa ffmpeg para tomar el cuadro del stream, `--snapshot-url` y `--hls-url` aceptan URLs directas, `--una-vez` captura una sola vez y `--calib X Y0 PX100` y `--roi X Y W H` sobrescriben la calibración. La salida queda en `datos/cuadros` (cuadros crudos), `datos/cuadros_escala` (con escala e índice) y `datos/registro.csv`.
+Opciones principales: `--umbral-brillo` fija la luminancia desde la cual un píxel cuenta como brillante, `--modo hls` usa ffmpeg para tomar el cuadro del stream, `--snapshot-url` y `--hls-url` aceptan URLs directas, `--una-vez` captura una sola vez y `--calib X Y0 PX100` y `--roi X Y W H` sobrescriben la calibración. La salida queda en `datos/cuadros` (cuadros crudos), `datos/cuadros_escala` (con escala e índice) y `datos/registro.csv`.
 
 ## Notas técnicas
 

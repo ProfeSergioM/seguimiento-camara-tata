@@ -39,6 +39,7 @@ except Exception:  # pragma: no cover
 REF_W = 1920
 CALIB = {"x": 868.5, "y0": 565.6, "px_por_100m": 54.1, "altura_max": 500}
 ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
+UMBRAL_BRILLO = 200
 UA = "Mozilla/5.0 (seguimiento-camara-tata)"
 
 
@@ -92,7 +93,7 @@ def fuente(tam):
 
 
 def indice_incandescencia(im, f):
-    """Porcentaje de píxeles rojizos o saturados dentro de la ROI."""
+    """Porcentaje de píxeles rojizos o brillantes dentro de la ROI."""
     x, y = int(ROI["x"] * f), int(ROI["y"] * f)
     w, h = int(ROI["w"] * f), int(ROI["h"] * f)
     roi = im.crop((x, y, x + w, y + h)).convert("RGB")
@@ -103,7 +104,9 @@ def indice_incandescencia(im, f):
         for i in range(roi.width):
             R, G, B = px[i, j]
             lum += 0.299 * R + 0.587 * G + 0.114 * B
-            if (R >= 140 and R > G * 1.25 and R > B * 1.6) or (R >= 250 and G >= 200):
+            # Rojizo (solo en color) o brillante (criterio que cuenta de noche,
+            # cuando la cámara transmite en blanco y negro).
+            if (R >= 140 and R > G * 1.25 and R > B * 1.6) or (0.299 * R + 0.587 * G + 0.114 * B >= UMBRAL_BRILLO):
                 calientes += 1
     gris = im.convert("L").resize((160, max(1, int(160 * im.height / im.width))))
     lum_cuadro = sum(gris.tobytes()) / (gris.width * gris.height)
@@ -140,11 +143,14 @@ def main():
     ap.add_argument("--intervalo", type=float, default=5.0, help="minutos entre capturas")
     ap.add_argument("--salida", default="datos", help="carpeta de salida")
     ap.add_argument("--umbral", type=float, default=2.0, help="umbral del índice (%%) para marcar incandescencia")
+    ap.add_argument("--umbral-brillo", type=float, default=200, help="luminancia (0 a 255) desde la cual un píxel cuenta como brillante")
     ap.add_argument("--calib", nargs=3, type=float, metavar=("X", "Y0", "PX100"), help="sobrescribe x, y0, px por 100 m")
     ap.add_argument("--roi", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="sobrescribe la ROI")
     ap.add_argument("--una-vez", action="store_true", help="captura una sola vez y termina")
     a = ap.parse_args()
 
+    global UMBRAL_BRILLO
+    UMBRAL_BRILLO = a.umbral_brillo
     if a.calib:
         CALIB.update(x=a.calib[0], y0=a.calib[1], px_por_100m=a.calib[2])
     if a.roi:
