@@ -35,10 +35,10 @@ try:
 except Exception:  # pragma: no cover
     ZONA = None
 
-# Calibración preliminar en píxeles de referencia (cuadro de 1393 px de ancho).
-REF_W = 1393
-CALIB = {"x": 678.0, "y0": 380.5, "px_por_100m": 47.5, "altura_max": 500}
-ROI = {"x": 618, "y": 345, "w": 120, "h": 60}
+# Calibración preliminar en píxeles del cuadro nativo (1920 × 1080 px).
+REF_W = 1920
+CALIB = {"x": 868.5, "y0": 565.6, "px_por_100m": 54.1, "altura_max": 500}
+ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
 UA = "Mozilla/5.0 (seguimiento-camara-tata)"
 
 

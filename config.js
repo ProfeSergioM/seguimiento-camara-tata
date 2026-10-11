@@ -22,18 +22,21 @@ window.CAM_CONFIG = {
   // Segundos entre snapshots en modo "snapshot".
   intervaloSnapshot: 10,
 
-  // Calibración preliminar, en píxeles de referencia de un cuadro de
-  // 1393 px de ancho (la captura usada para calibrar). Las coordenadas se
-  // reescalan al tamaño real del video.
+  // Calibración preliminar en píxeles del cuadro nativo de la cámara
+  // (snapshot de 1920 × 1080 px). Se reescala si el video llega con otra
+  // resolución.
   //   x         : columna de la escala (vertical sobre el cráter)
   //   y0        : fila del 0 m (cumbre / borde del cráter)
-  //   pxPor100m : píxeles de referencia por cada 100 m de altura
+  //   pxPor100m : píxeles por cada 100 m de altura
   //   alturaMax : extensión de la escala, en metros
-  calibracion: { refW: 1393, x: 678, y0: 380.5, pxPor100m: 47.5, alturaMax: 500 },
+  // Valores trasladados desde la captura de calibración original
+  // (docs/calibracion_preliminar.jpg) mediante un ajuste afín con 228
+  // puntos homólogos; ver README, sección Calibración.
+  calibracion: { refW: 1920, x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 },
 
   // Región de interés para el índice de incandescencia nocturna, en los
-  // mismos píxeles de referencia (rectángulo sobre el cráter).
-  roi: { x: 618, y: 345, w: 120, h: 60 },
+  // mismos píxeles del cuadro nativo (rectángulo sobre el cráter).
+  roi: { x: 808, y: 525, w: 120, h: 68 },
 
   // Umbral del índice de incandescencia (% de píxeles "calientes" en la
   // ROI) a partir del cual se marca actividad.

@@ -6,12 +6,13 @@
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
-    calib: "tata.calib",
-    roi: "tata.roi",
+    calib: "tata.calib.v2",
+    roi: "tata.roi.v2",
     registro: "tata.registro",
     muestras: "tata.muestras"
   };
-  const REF_W = (CFG.calibracion && CFG.calibracion.refW) || 1393;
+  try { localStorage.removeItem("tata.calib"); localStorage.removeItem("tata.roi"); } catch (e) {}
+  const REF_W = (CFG.calibracion && CFG.calibracion.refW) || 1920;
 
   // ---------- Estado ----------
   const estado = {
@@ -27,8 +28,8 @@
       brillo: 1,
       contraste: 1
     }, leer(LS.ajustes, {})),
-    calib: Object.assign({}, CFG.calibracion || { x: 678, y0: 380.5, pxPor100m: 47.5, alturaMax: 500 }, leer(LS.calib, {})),
-    roi: Object.assign({}, CFG.roi || { x: 618, y: 345, w: 120, h: 60 }, leer(LS.roi, {})),
+    calib: Object.assign({}, CFG.calibracion || { x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 }, leer(LS.calib, {})),
+    roi: Object.assign({}, CFG.roi || { x: 808, y: 525, w: 120, h: 68 }, leer(LS.roi, {})),
     registro: leer(LS.registro, []),
     muestras: leer(LS.muestras, []),
     modoUi: "ver",

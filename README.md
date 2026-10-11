@@ -17,7 +17,7 @@ El sitio no necesita servidor ni compilación. Se puede publicar en GitHub Pages
 
 1. Abra https://www.nevadosdechillan.com/camaras en el navegador.
 2. Con clic derecho sobre el reproductor de Plaza Tata elija Inspeccionar, o vea el código fuente de la página.
-3. Busque un iframe con un `src` del tipo `https://ipcamlive.com/player/player.php?alias=XXXXXXXX`. El valor de `alias` es lo que necesita.
+3. Busque un iframe con un `src` del tipo `https://ipcamlive.com/player/player.php?alias=XXXXXXXX`. El valor de `alias` es lo que necesita. Para la cámara Plaza Tata el alias es `plazatata` y ya viene configurado.
 
 Si se prefiere, la pestaña Red de las herramientas de desarrollo muestra también la URL del stream HLS (termina en `stream.m3u8`) y la URL del snapshot JPG. Ambas se pueden pegar directamente en el panel Fuente del sitio.
 
@@ -27,8 +27,8 @@ Edite `config.js` para dejar el alias fijo y elegir el modo inicial:
 
 | Modo | Qué muestra | Medición | Índice de incandescencia |
 |---|---|---|---|
+| `snapshot` (por defecto) | Imagen JPG cada N segundos | Sí | Sí, si el servidor permite leer píxeles (CORS) |
 | `hls` | Video en vivo con hls.js | Sí | Sí, si el servidor permite leer píxeles (CORS) |
-| `snapshot` | Imagen JPG cada N segundos | Sí | Sí, con la misma condición |
 | `iframe` | Reproductor oficial de IPCamLive | Sí | No |
 
 Todo lo que se cambie desde la interfaz queda guardado en el navegador y tiene prioridad sobre `config.js`.
@@ -56,21 +56,28 @@ Escribe `dist/tata.html` con el CSS, la lógica, la configuración y hls.js embe
 
 ## Calibración preliminar
 
-La calibración viene de una captura de 1393 × 667 px en la que la escala se dibujó a mano. Las coordenadas se expresan en píxeles de ese cuadro de referencia y se reescalan al tamaño real del video. La imagen está en `docs/calibracion_preliminar.jpg`.
+La cámara entrega cuadros de 1920 × 1080 px con un lente gran angular. La calibración se expresa en píxeles de ese cuadro nativo y se reescala si el video llega con otra resolución.
 
 | Parámetro | Valor | Significado |
 |---|---|---|
-| x | 678 | columna de la escala, sobre el cráter |
-| y0 | 380.5 | fila del 0 m, en la cumbre |
-| píxeles por 100 m | 47.5 | separación entre marcas |
+| x | 868.5 | columna de la escala, sobre el cráter |
+| y0 | 565.6 | fila del 0 m, en la cumbre |
+| píxeles por 100 m | 54.1 | separación entre marcas |
 | altura máxima | 500 m | extensión de la escala |
+| ROI | 808, 525, 120, 68 | región para el índice de incandescencia |
 
-Supuestos y limitaciones que conviene tener presentes:
+### De dónde salen estos valores
+
+La escala original se dibujó sobre una captura de pantalla de 1393 × 667 px (`docs/calibracion_preliminar.jpg`), con 0 m en la fila 380.5 y 47.5 px entre marcas. Esa captura resultó ser un recorte del cuadro nativo con la dimensión vertical comprimida. Para trasladar la escala se emparejaron 228 puntos homólogos entre la captura y un snapshot nativo (`docs/snapshot_plazatata_1920x1080.jpg`) y se ajustó una transformación afín. El ajuste da una escala horizontal de 1.004, una escala vertical de 1.139, rotación nula y un residuo mediano de 0.43 px. El resultado sobre el cuadro nativo está en `docs/calibracion_cuadro_nativo.jpg`.
+
+La separación de 54.1 px por 100 m conserva la escala tal como se dibujó sobre el paisaje. Si los 47.5 px por 100 m originales se calcularon a partir de la geometría de la cámara, y no midiendo sobre la captura, el valor correcto en el cuadro nativo sería 47.5 y las alturas actuales estarían sobrestimadas en un 14 %.
+
+### Supuestos y limitaciones
 
 - La altura se mide sobre la cumbre visible, suponiendo que la columna sube en vertical y en el mismo plano que el cráter. Una columna inclinada por el viento o desplazada hacia la cámara o hacia atrás cambia la escala aparente.
-- La escala de 47.5 px por 100 m es preliminar y debe verificarse con una referencia conocida, por ejemplo la distancia entre dos puntos de altitud conocida en la misma línea visual. Hasta entonces las alturas son estimaciones.
-- La captura usada tiene una relación de aspecto distinta de 16:9, por lo que la posición vertical puede quedar levemente desplazada en el video real. El modo Calibrar permite corregirlo arrastrando el 0 m a la cumbre y se guarda en el navegador.
-- Si la cámara cambia de encuadre o de zoom, la calibración deja de valer y hay que repetirla.
+- La escala es lineal. El lente gran angular deforma los bordes del cuadro, pero el cráter está cerca del centro, donde la deformación es menor. Las columnas que superen el cuadro superior de la escala conviene interpretarlas con más cautela.
+- La escala debe verificarse con una referencia de altitud conocida antes de reportar valores. Hasta entonces las alturas son estimaciones.
+- Si la cámara cambia de encuadre o de zoom, la calibración deja de valer y hay que repetirla con el modo Calibrar.
 
 ## Registro automático desde un computador
 
@@ -78,7 +85,7 @@ Supuestos y limitaciones que conviene tener presentes:
 
 ```bash
 pip install pillow
-python3 scripts/monitor.py --alias XXXXXXXX --intervalo 5 --salida datos
+python3 scripts/monitor.py --alias plazatata --intervalo 5 --salida datos
 ```
 
 Opciones principales: `--modo hls` usa ffmpeg para tomar el cuadro del stream, `--snapshot-url` y `--hls-url` aceptan URLs directas, `--una-vez` captura una sola vez y `--calib X Y0 PX100` y `--roi X Y W H` sobrescriben la calibración. La salida queda en `datos/cuadros` (cuadros crudos), `datos/cuadros_escala` (con escala e índice) y `datos/registro.csv`.

@@ -142,12 +142,12 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
         <label>Fila del 0 m y0 (px ref) <input id="cal-y0" type="number" step="0.5"></label>
         <label>Píxeles por 100 m <input id="cal-px" type="number" step="0.1"></label>
         <label>Altura máxima (m) <input id="cal-max" type="number" step="100"></label>
-        <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="618, 345, 120, 60"></label>
+        <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="808, 525, 120, 68"></label>
         <div class="acciones">
           <button class="boton primario" id="btn-cal-aplicar">Aplicar</button>
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
         </div>
-        <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta la cumbre, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles de un cuadro de referencia de 1393 px de ancho.</p>
+        <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta la cumbre, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles del cuadro nativo de la cámara, de 1920 × 1080 px.</p>
       </div>
     </details>
 
@@ -236,18 +236,21 @@ window.CAM_CONFIG = {
   // Segundos entre snapshots en modo "snapshot".
   intervaloSnapshot: 10,
 
-  // Calibración preliminar, en píxeles de referencia de un cuadro de
-  // 1393 px de ancho (la captura usada para calibrar). Las coordenadas se
-  // reescalan al tamaño real del video.
+  // Calibración preliminar en píxeles del cuadro nativo de la cámara
+  // (snapshot de 1920 × 1080 px). Se reescala si el video llega con otra
+  // resolución.
   //   x         : columna de la escala (vertical sobre el cráter)
   //   y0        : fila del 0 m (cumbre / borde del cráter)
-  //   pxPor100m : píxeles de referencia por cada 100 m de altura
+  //   pxPor100m : píxeles por cada 100 m de altura
   //   alturaMax : extensión de la escala, en metros
-  calibracion: { refW: 1393, x: 678, y0: 380.5, pxPor100m: 47.5, alturaMax: 500 },
+  // Valores trasladados desde la captura de calibración original
+  // (docs/calibracion_preliminar.jpg) mediante un ajuste afín con 228
+  // puntos homólogos; ver README, sección Calibración.
+  calibracion: { refW: 1920, x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 },
 
   // Región de interés para el índice de incandescencia nocturna, en los
-  // mismos píxeles de referencia (rectángulo sobre el cráter).
-  roi: { x: 618, y: 345, w: 120, h: 60 },
+  // mismos píxeles del cuadro nativo (rectángulo sobre el cráter).
+  roi: { x: 808, y: 525, w: 120, h: 68 },
 
   // Umbral del índice de incandescencia (% de píxeles "calientes" en la
   // ROI) a partir del cual se marca actividad.
@@ -274,12 +277,13 @@ window.CAM_CONFIG = {
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
-    calib: "tata.calib",
-    roi: "tata.roi",
+    calib: "tata.calib.v2",
+    roi: "tata.roi.v2",
     registro: "tata.registro",
     muestras: "tata.muestras"
   };
-  const REF_W = (CFG.calibracion && CFG.calibracion.refW) || 1393;
+  try { localStorage.removeItem("tata.calib"); localStorage.removeItem("tata.roi"); } catch (e) {}
+  const REF_W = (CFG.calibracion && CFG.calibracion.refW) || 1920;
 
   // ---------- Estado ----------
   const estado = {
@@ -295,8 +299,8 @@ window.CAM_CONFIG = {
       brillo: 1,
       contraste: 1
     }, leer(LS.ajustes, {})),
-    calib: Object.assign({}, CFG.calibracion || { x: 678, y0: 380.5, pxPor100m: 47.5, alturaMax: 500 }, leer(LS.calib, {})),
-    roi: Object.assign({}, CFG.roi || { x: 618, y: 345, w: 120, h: 60 }, leer(LS.roi, {})),
+    calib: Object.assign({}, CFG.calibracion || { x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 }, leer(LS.calib, {})),
+    roi: Object.assign({}, CFG.roi || { x: 808, y: 525, w: 120, h: 68 }, leer(LS.roi, {})),
     registro: leer(LS.registro, []),
     muestras: leer(LS.muestras, []),
     modoUi: "ver",
