@@ -12,31 +12,45 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<main>
-  <section class="visor">
-    <div class="escenario" id="escenario">
-      <div class="medios" id="medios"></div>
-      <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
-      <h1 class="rotulo titulo">Cámara Tata · Nevados de Chillán</h1>
-      <div class="rotulo reloj" id="reloj">--:--:--</div>
-      <div class="aviso" id="aviso" hidden></div>
-    </div>
+<main class="app" id="app">
+  <div class="escenario" id="escenario">
+    <div class="medios" id="medios"></div>
+    <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="aviso" id="aviso" hidden></div>
+  </div>
 
-    <div class="barra">
-      <div class="grupo" role="group" aria-label="Modo de interacción">
-        <button class="boton activo" data-modo="ver" id="btn-ver">Ver</button>
-        <button class="boton" data-modo="medir" id="btn-medir">Medir</button>
-        <button class="boton" data-modo="calibrar" id="btn-calibrar">Calibrar</button>
-      </div>
-      <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
-      <div class="grupo">
-        <button class="boton" id="btn-registrar">Registrar</button>
-        <button class="boton" id="btn-capturar">Capturar PNG</button>
-      </div>
+  <header class="barra-sup" id="barra-sup">
+    <h1 class="titulo">Cámara Tata · Nevados de Chillán</h1>
+    <div class="grupo segmentado" role="group" aria-label="Modo de interacción">
+      <button class="boton activo" data-modo="ver" id="btn-ver" title="Ver la cámara (tecla V)">Ver</button>
+      <button class="boton" data-modo="medir" id="btn-medir" title="Medir la altura con un clic (tecla M)">Medir</button>
+      <button class="boton" data-modo="calibrar" id="btn-calibrar" title="Ajustar la escala y la ROI (tecla C)">Calibrar</button>
     </div>
-    <p class="estado" id="estado">Sin fuente.</p>
-  </section>
+    <div class="grupo segmentado" role="group" aria-label="Fuente de imagen">
+      <button class="boton" data-fuente="hls" title="Video en vivo">Video</button>
+      <button class="boton" data-fuente="snapshot" title="Foto actualizada cada pocos segundos">Snapshot</button>
+    </div>
+    <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+    <div class="grupo">
+      <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
+      <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
+      <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
+      <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
+    </div>
+    <div class="relojes">
+      <div><span class="etq">Local</span> <span id="reloj-local">--:--:--</span></div>
+      <div><span class="etq">UTC</span> <span id="reloj-utc">--:--:--</span></div>
+    </div>
+  </header>
 
+  <p class="estado" id="estado">Sin fuente.</p>
+</main>
+
+<aside class="lateral" id="lateral" aria-label="Configuración y registro">
+  <div class="lateral-cab">
+    <strong>Configuración y registro</strong>
+    <button class="boton icono" id="btn-cerrar-menu" aria-label="Cerrar menú" title="Cerrar (Esc)">✕</button>
+  </div>
   <section class="paneles">
     <details class="panel" open>
       <summary>Fuente</summary>
@@ -124,11 +138,11 @@
       </div>
     </details>
   </section>
-</main>
-
-<footer class="pie">
-  <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-</footer>
+  <footer class="pie">
+    <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
+    <p>Atajos: V ver, M medir, C calibrar, F pantalla completa, Esc cerrar este panel.</p>
+  </footer>
+</aside>
 
 <canvas id="lienzo" hidden></canvas>
 <script src="vendor/hls.light.min.js"></script>

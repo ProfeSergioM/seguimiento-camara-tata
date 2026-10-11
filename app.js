@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 c";
+  const VERSION = "2026-10-11 d";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -65,10 +65,23 @@
     return new Intl.DateTimeFormat("es-CL", { timeZone: zona, hour12: false,
       year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(d);
   }
-  function tictac() { $("reloj").textContent = horaLocal(new Date()).split(" ").pop(); }
+  const fmtHora = (tz) => new Intl.DateTimeFormat("es-CL", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const fmtLocal = fmtHora(zona), fmtUtc = fmtHora("UTC");
+  function tictac() {
+    const d = new Date();
+    $("reloj-local").textContent = fmtLocal.format(d);
+    $("reloj-utc").textContent = fmtUtc.format(d);
+  }
   setInterval(tictac, 1000); tictac();
 
-  function setEstado(msg) { estadoEl.textContent = msg; }
+  function setEstado(msg) { estadoEl.textContent = msg; marcarFuente(); }
+
+  // Resalta Video o Snapshot según lo que realmente se está mostrando
+  // (si el video falla y se pasa a snapshot, se ve reflejado).
+  function marcarFuente() {
+    const actual = estado.tipoMedia === "video" ? "hls" : estado.tipoMedia === "img" ? "snapshot" : "";
+    document.querySelectorAll("[data-fuente]").forEach(b => b.classList.toggle("activo", b.dataset.fuente === actual));
+  }
   function mostrarAviso(msg) { aviso.textContent = msg; aviso.hidden = !msg; }
 
   // ---------- Fuente ----------
@@ -603,6 +616,52 @@
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
   $("btn-noche").addEventListener("click", () => { $("n-brillo").value = 2.2; $("n-contraste").value = 1.4; guardarNoche(); });
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
+
+  // ---------- Barra superior, panel lateral y pantalla completa ----------
+  document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
+    estado.ajustes.modo = b.dataset.fuente;
+    $("in-modo").value = b.dataset.fuente;
+    guardar(LS.ajustes, estado.ajustes);
+    conectar();
+  }));
+
+  const lateral = $("lateral"), app = $("app");
+  function abrirMenu(abrir) {
+    lateral.classList.toggle("abierto", abrir);
+    $("btn-menu").setAttribute("aria-expanded", String(abrir));
+    if (abrir) dibujarGrafico();
+  }
+  $("btn-menu").addEventListener("click", () => abrirMenu(!lateral.classList.contains("abierto")));
+  $("btn-cerrar-menu").addEventListener("click", () => abrirMenu(false));
+
+  function pantallaCompleta() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
+  $("btn-pantalla").addEventListener("click", pantallaCompleta);
+
+  // En pantalla completa, la barra se oculta tras unos segundos sin mover
+  // el mouse, salvo que se esté midiendo, calibrando o con el menú abierto.
+  let timerOculta = null;
+  function mostrarBarra() {
+    app.classList.remove("oculta");
+    clearTimeout(timerOculta);
+    timerOculta = setTimeout(() => {
+      if (document.fullscreenElement && estado.modoUi === "ver" && !lateral.classList.contains("abierto")) app.classList.add("oculta");
+    }, 4000);
+  }
+  ["mousemove", "pointerdown", "keydown", "touchstart"].forEach(ev => document.addEventListener(ev, mostrarBarra, { passive: true }));
+  document.addEventListener("fullscreenchange", mostrarBarra);
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.target.closest("input, select, textarea") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const k = ev.key.toLowerCase();
+    if (k === "escape") abrirMenu(false);
+    else if (k === "v") fijarModoUi("ver");
+    else if (k === "m") fijarModoUi("medir");
+    else if (k === "c") fijarModoUi("calibrar");
+    else if (k === "f") pantallaCompleta();
+  });
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;

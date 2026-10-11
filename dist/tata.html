@@ -21,21 +21,20 @@
   --peligro: #e5533d;
   --ok: #52b788;
   --radio: 8px;
+  --vidrio: rgba(10, 14, 20, 0.62);
   --fuente: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--fondo); color: var(--texto); font-family: var(--fuente); }
-body { padding: 0 12px 32px; }
-/* La cámara ocupa el ancho disponible sin pasar del alto de la ventana.
-   --aspecto lo fija app.js con la resolución real del video. */
-.visor { --reserva: 84px; width: min(100%, calc((100vh - var(--reserva)) * var(--aspecto, 1.7778))); margin: 8px auto 0; }
-@supports (height: 100dvh) { .visor { width: min(100%, calc((100dvh - var(--reserva)) * var(--aspecto, 1.7778))); } }
-.escenario { position: relative; width: 100%; aspect-ratio: var(--aspecto, 1.7778); background: #000; border-radius: var(--radio); overflow: hidden; border: 1px solid var(--borde); }
-.rotulo { position: absolute; top: 10px; margin: 0; padding: 4px 10px; border-radius: 6px; background: rgba(10, 14, 20, 0.55);
-  color: var(--texto); font-size: clamp(14px, 1.5vw, 26px); font-weight: 600; line-height: 1.3; pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
-.titulo { left: 10px; }
-.reloj { right: 10px; font-variant-numeric: tabular-nums; color: var(--acento); }
+html, body { margin: 0; height: 100%; background: #000; color: var(--texto); font-family: var(--fuente); overflow: hidden; }
+
+/* ---------- Vista a pantalla completa ----------
+   La cámara se ajusta al mayor tamaño que cabe en la ventana sin
+   deformarse ni recortarse. --aspecto lo fija app.js con la resolución
+   real del video. */
+.app { position: fixed; inset: 0; display: grid; place-items: center; background: #000; }
+.escenario { position: relative; aspect-ratio: var(--aspecto, 1.7778);
+  width: min(100vw, calc(100vh * var(--aspecto, 1.7778))); }
+@supports (height: 100dvh) { .escenario { width: min(100vw, calc(100dvh * var(--aspecto, 1.7778))); } }
 .medios, .medios > * { position: absolute; inset: 0; width: 100%; height: 100%; }
 .medios video, .medios img { object-fit: fill; display: block; background: #000; }
 .medios iframe { border: 0; }
@@ -43,21 +42,45 @@ body { padding: 0 12px 32px; }
 .overlay.interactivo { pointer-events: auto; cursor: crosshair; }
 .overlay.interactivo.calibrar { cursor: default; }
 .overlay .arrastrable { cursor: grab; }
-.aviso { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(15,20,25,0.85); padding: 12px 16px; border-radius: var(--radio); border: 1px solid var(--borde); max-width: 80%; text-align: center; }
+.aviso { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--vidrio); padding: 12px 16px;
+  border-radius: var(--radio); border: 1px solid var(--borde); max-width: 80%; text-align: center; }
 
-.barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
-.grupo { display: flex; gap: 6px; flex-wrap: wrap; }
-.lectura { font-size: 1.1rem; margin-left: auto; margin-right: auto; }
+/* ---------- Barra superior sobre la imagen ---------- */
+.barra-sup { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+  padding: 8px 12px 14px; background: linear-gradient(to bottom, rgba(5, 8, 12, 0.85), rgba(5, 8, 12, 0.55) 70%, rgba(5, 8, 12, 0));
+  transition: opacity 0.3s; }
+.app.oculta .barra-sup, .app.oculta .estado { opacity: 0; pointer-events: none; }
+.titulo { margin: 0; font-size: clamp(15px, 1.25vw, 22px); font-weight: 650; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+.grupo { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.segmentado { gap: 0; }
+.segmentado .boton { border-radius: 0; margin-left: -1px; }
+.segmentado .boton:first-child { border-radius: var(--radio) 0 0 var(--radio); margin-left: 0; }
+.segmentado .boton:last-child { border-radius: 0 var(--radio) var(--radio) 0; }
+.lectura { font-size: clamp(14px, 1.1vw, 19px); margin: 0 auto; text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .lectura strong { color: var(--acento-2); font-variant-numeric: tabular-nums; }
-.estado { color: var(--texto-suave); font-size: 0.85rem; margin: 4px 0 0; }
+.relojes { font-variant-numeric: tabular-nums; font-size: clamp(14px, 1.1vw, 19px); line-height: 1.25; text-align: right; color: var(--acento);
+  text-shadow: 0 1px 2px #000; }
+.relojes .etq { color: var(--texto-suave); font-size: 0.75em; display: inline-block; min-width: 3.2em; }
 
-.boton { background: var(--panel); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); padding: 8px 12px; font: inherit; cursor: pointer; }
+.estado { position: fixed; left: 12px; bottom: 10px; z-index: 10; margin: 0; max-width: calc(100vw - 24px); padding: 4px 8px; border-radius: 6px;
+  background: var(--vidrio); color: var(--texto-suave); font-size: 0.8rem; transition: opacity 0.3s; }
+
+/* ---------- Botones y formularios ---------- */
+.boton { background: rgba(23, 29, 36, 0.85); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); padding: 7px 12px;
+  font: inherit; font-size: 0.92rem; cursor: pointer; }
 .boton:hover { border-color: var(--acento); }
-.boton.activo { background: var(--acento); color: #06202b; border-color: var(--acento); font-weight: 600; }
-.boton.primario { background: var(--acento); color: #06202b; border-color: var(--acento); font-weight: 600; }
+.boton.activo, .boton.primario { background: var(--acento); color: #06202b; border-color: var(--acento); font-weight: 600; }
 .boton.peligro { border-color: var(--peligro); color: var(--peligro); }
+.boton.icono { min-width: 36px; padding: 7px 9px; font-size: 1.05rem; line-height: 1; }
 
-.paneles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 16px; }
+/* ---------- Panel lateral ---------- */
+.lateral { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; width: min(440px, 100vw); overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(15, 20, 25, 0.94); border-left: 1px solid var(--borde); backdrop-filter: blur(6px);
+  transform: translateX(100%); transition: transform 0.25s ease; padding: 0 12px 16px; }
+.lateral.abierto { transform: translateX(0); box-shadow: -8px 0 24px rgba(0, 0, 0, 0.5); }
+.lateral-cab { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 2px; background: rgba(15, 20, 25, 0.98); }
+.paneles { display: flex; flex-direction: column; gap: 10px; }
 .panel { background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio); }
 .panel summary { padding: 10px 14px; cursor: pointer; font-weight: 600; }
 .campos { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -71,7 +94,6 @@ code { background: var(--fondo); padding: 1px 4px; border-radius: 4px; }
 .indice strong { color: var(--acento-2); font-variant-numeric: tabular-nums; }
 .indice.alerta strong { color: var(--peligro); }
 .grafico { width: 100%; height: 160px; background: var(--fondo); border: 1px solid var(--borde); border-radius: 6px; }
-
 .tabla-env { overflow: auto; max-height: 320px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--borde); white-space: nowrap; }
@@ -79,40 +101,58 @@ th { color: var(--texto-suave); font-weight: 600; position: sticky; top: 0; back
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .quitar { background: none; border: 0; color: var(--texto-suave); cursor: pointer; }
 .quitar:hover { color: var(--peligro); }
-.pie { color: var(--texto-suave); font-size: 0.8rem; margin-top: 24px; }
+.pie { color: var(--texto-suave); font-size: 0.8rem; margin-top: 16px; }
 
-@media (max-width: 600px) {
-  .lectura { margin: 0; width: 100%; }
+@media (max-width: 760px) {
+  .barra-sup { gap: 6px 8px; padding: 6px 8px 10px; }
+  .titulo { width: 100%; }
+  .lectura { margin: 0; }
+  .boton { padding: 6px 9px; font-size: 0.85rem; }
+  .relojes { margin-left: auto; font-size: 13px; }
 }
 
 </style>
 </head>
 <body>
-<main>
-  <section class="visor">
-    <div class="escenario" id="escenario">
-      <div class="medios" id="medios"></div>
-      <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
-      <h1 class="rotulo titulo">Cámara Tata · Nevados de Chillán</h1>
-      <div class="rotulo reloj" id="reloj">--:--:--</div>
-      <div class="aviso" id="aviso" hidden></div>
-    </div>
+<main class="app" id="app">
+  <div class="escenario" id="escenario">
+    <div class="medios" id="medios"></div>
+    <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="aviso" id="aviso" hidden></div>
+  </div>
 
-    <div class="barra">
-      <div class="grupo" role="group" aria-label="Modo de interacción">
-        <button class="boton activo" data-modo="ver" id="btn-ver">Ver</button>
-        <button class="boton" data-modo="medir" id="btn-medir">Medir</button>
-        <button class="boton" data-modo="calibrar" id="btn-calibrar">Calibrar</button>
-      </div>
-      <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
-      <div class="grupo">
-        <button class="boton" id="btn-registrar">Registrar</button>
-        <button class="boton" id="btn-capturar">Capturar PNG</button>
-      </div>
+  <header class="barra-sup" id="barra-sup">
+    <h1 class="titulo">Cámara Tata · Nevados de Chillán</h1>
+    <div class="grupo segmentado" role="group" aria-label="Modo de interacción">
+      <button class="boton activo" data-modo="ver" id="btn-ver" title="Ver la cámara (tecla V)">Ver</button>
+      <button class="boton" data-modo="medir" id="btn-medir" title="Medir la altura con un clic (tecla M)">Medir</button>
+      <button class="boton" data-modo="calibrar" id="btn-calibrar" title="Ajustar la escala y la ROI (tecla C)">Calibrar</button>
     </div>
-    <p class="estado" id="estado">Sin fuente.</p>
-  </section>
+    <div class="grupo segmentado" role="group" aria-label="Fuente de imagen">
+      <button class="boton" data-fuente="hls" title="Video en vivo">Video</button>
+      <button class="boton" data-fuente="snapshot" title="Foto actualizada cada pocos segundos">Snapshot</button>
+    </div>
+    <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+    <div class="grupo">
+      <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
+      <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
+      <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
+      <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
+    </div>
+    <div class="relojes">
+      <div><span class="etq">Local</span> <span id="reloj-local">--:--:--</span></div>
+      <div><span class="etq">UTC</span> <span id="reloj-utc">--:--:--</span></div>
+    </div>
+  </header>
 
+  <p class="estado" id="estado">Sin fuente.</p>
+</main>
+
+<aside class="lateral" id="lateral" aria-label="Configuración y registro">
+  <div class="lateral-cab">
+    <strong>Configuración y registro</strong>
+    <button class="boton icono" id="btn-cerrar-menu" aria-label="Cerrar menú" title="Cerrar (Esc)">✕</button>
+  </div>
   <section class="paneles">
     <details class="panel" open>
       <summary>Fuente</summary>
@@ -200,11 +240,11 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
       </div>
     </details>
   </section>
-</main>
-
-<footer class="pie">
-  <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-</footer>
+  <footer class="pie">
+    <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
+    <p>Atajos: V ver, M medir, C calibrar, F pantalla completa, Esc cerrar este panel.</p>
+  </footer>
+</aside>
 
 <canvas id="lienzo" hidden></canvas>
 <script>
@@ -275,7 +315,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 c";
+  const VERSION = "2026-10-11 d";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -337,10 +377,23 @@ window.CAM_CONFIG = {
     return new Intl.DateTimeFormat("es-CL", { timeZone: zona, hour12: false,
       year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(d);
   }
-  function tictac() { $("reloj").textContent = horaLocal(new Date()).split(" ").pop(); }
+  const fmtHora = (tz) => new Intl.DateTimeFormat("es-CL", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const fmtLocal = fmtHora(zona), fmtUtc = fmtHora("UTC");
+  function tictac() {
+    const d = new Date();
+    $("reloj-local").textContent = fmtLocal.format(d);
+    $("reloj-utc").textContent = fmtUtc.format(d);
+  }
   setInterval(tictac, 1000); tictac();
 
-  function setEstado(msg) { estadoEl.textContent = msg; }
+  function setEstado(msg) { estadoEl.textContent = msg; marcarFuente(); }
+
+  // Resalta Video o Snapshot según lo que realmente se está mostrando
+  // (si el video falla y se pasa a snapshot, se ve reflejado).
+  function marcarFuente() {
+    const actual = estado.tipoMedia === "video" ? "hls" : estado.tipoMedia === "img" ? "snapshot" : "";
+    document.querySelectorAll("[data-fuente]").forEach(b => b.classList.toggle("activo", b.dataset.fuente === actual));
+  }
   function mostrarAviso(msg) { aviso.textContent = msg; aviso.hidden = !msg; }
 
   // ---------- Fuente ----------
@@ -875,6 +928,52 @@ window.CAM_CONFIG = {
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
   $("btn-noche").addEventListener("click", () => { $("n-brillo").value = 2.2; $("n-contraste").value = 1.4; guardarNoche(); });
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
+
+  // ---------- Barra superior, panel lateral y pantalla completa ----------
+  document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
+    estado.ajustes.modo = b.dataset.fuente;
+    $("in-modo").value = b.dataset.fuente;
+    guardar(LS.ajustes, estado.ajustes);
+    conectar();
+  }));
+
+  const lateral = $("lateral"), app = $("app");
+  function abrirMenu(abrir) {
+    lateral.classList.toggle("abierto", abrir);
+    $("btn-menu").setAttribute("aria-expanded", String(abrir));
+    if (abrir) dibujarGrafico();
+  }
+  $("btn-menu").addEventListener("click", () => abrirMenu(!lateral.classList.contains("abierto")));
+  $("btn-cerrar-menu").addEventListener("click", () => abrirMenu(false));
+
+  function pantallaCompleta() {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else document.documentElement.requestFullscreen().catch(() => {});
+  }
+  $("btn-pantalla").addEventListener("click", pantallaCompleta);
+
+  // En pantalla completa, la barra se oculta tras unos segundos sin mover
+  // el mouse, salvo que se esté midiendo, calibrando o con el menú abierto.
+  let timerOculta = null;
+  function mostrarBarra() {
+    app.classList.remove("oculta");
+    clearTimeout(timerOculta);
+    timerOculta = setTimeout(() => {
+      if (document.fullscreenElement && estado.modoUi === "ver" && !lateral.classList.contains("abierto")) app.classList.add("oculta");
+    }, 4000);
+  }
+  ["mousemove", "pointerdown", "keydown", "touchstart"].forEach(ev => document.addEventListener(ev, mostrarBarra, { passive: true }));
+  document.addEventListener("fullscreenchange", mostrarBarra);
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.target.closest("input, select, textarea") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const k = ev.key.toLowerCase();
+    if (k === "escape") abrirMenu(false);
+    else if (k === "v") fijarModoUi("ver");
+    else if (k === "m") fijarModoUi("medir");
+    else if (k === "c") fijarModoUi("calibrar");
+    else if (k === "f") pantallaCompleta();
+  });
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;

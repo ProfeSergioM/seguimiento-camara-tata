@@ -49,10 +49,24 @@ Escribe `dist/tata.html` con el CSS, la lógica, la configuración y hls.js embe
 
 ## Uso
 
-- **Ver**: el video responde normalmente al mouse. En modo iframe se pueden usar los controles del reproductor.
-- **Medir**: un clic o arrastre sobre el video coloca una línea horizontal y muestra la altura sobre la cumbre, redondeada a 10 m. El botón Registrar guarda la hora, el tipo de actividad, la altura, el índice de incandescencia y una nota.
+La cámara ocupa toda la ventana. Encima de la imagen hay una barra con los controles principales:
+
+- **Ver, Medir, Calibrar**: modos de interacción con la imagen.
+- **Video, Snapshot**: fuente de imagen. Queda marcada la que realmente se está mostrando, también cuando el video falla y el sitio pasa solo a snapshot.
+- **Altura**: lectura del marcador de medición, en metros sobre la cumbre.
+- **Registrar** y **Capturar PNG**: guardan la observación o descargan el cuadro con la escala.
+- **⛶**: pantalla completa. En ese modo la barra se oculta tras unos segundos sin mover el mouse.
+- **☰**: abre el panel lateral con la fuente, la calibración, el índice de incandescencia y el registro.
+- **Relojes**: hora local de Chile y hora UTC.
+
+Atajos de teclado: V ver, M medir, C calibrar, F pantalla completa y Esc para cerrar el panel lateral.
+
+Detalle de cada modo:
+
+- **Ver**: la imagen no responde al mouse. En modo iframe se pueden usar los controles del reproductor.
+- **Medir**: un clic o arrastre sobre la imagen coloca una línea horizontal y muestra la altura sobre la cumbre, redondeada a 10 m. Registrar guarda la hora, el tipo de actividad, la altura, el índice de incandescencia y una nota.
 - **Calibrar**: aparecen tres manijas. El punto celeste (0 m) se arrastra hasta la cumbre, el punto verde (500 m) fija la escala y el rectángulo rojo es la región de interés para incandescencia. También se pueden escribir los valores en el panel Calibración.
-- **Noche**: active el muestreo automático para que el índice se calcule cada N segundos. Cuando supera el umbral, la lectura se marca en rojo. Los presets de brillo y contraste solo afectan la visualización, no el análisis.
+- **Noche**: en el panel lateral se activa el muestreo automático para calcular el índice cada N segundos. Cuando supera el umbral, la lectura se marca en rojo. Los presets de brillo y contraste solo afectan la visualización, no el análisis.
 
 ## Calibración preliminar
 
