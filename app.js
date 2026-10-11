@@ -3,6 +3,7 @@
 (function () {
   "use strict";
 
+  const VERSION = "2026-10-11 c";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -94,7 +95,7 @@
     for (let intento = 1; intento <= 3; intento++) {
       let j;
       try {
-        const r = await fetch(u, { cache: "no-store" });
+        const r = await fetch(u, { cache: "no-store", referrerPolicy: "no-referrer" });
         if (!r.ok) throw new Error("HTTP " + r.status);
         j = await r.json();
       } catch (e) {
@@ -168,7 +169,7 @@
     const f = document.createElement("iframe");
     f.src = urlIframe();
     f.allow = "autoplay; fullscreen";
-    f.referrerPolicy = "no-referrer-when-downgrade";
+    f.referrerPolicy = "no-referrer";
     medios.appendChild(f);
     estado.media = f; estado.tipoMedia = "iframe"; estado.pixelesOk = false;
     estado.aspecto = CFG.aspectoPorDefecto || 16 / 9;
@@ -182,6 +183,7 @@
     img.alt = "Cámara Plaza Tata";
     let conCors = true;
     img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
     const cargar = () => { img.src = urlSnapshot() + (urlSnapshot().includes("?") ? "&" : "?") + "_=" + Date.now(); };
     img.addEventListener("load", () => {
       fijarAspecto(img.naturalWidth, img.naturalHeight);
@@ -234,7 +236,8 @@
     };
 
     if (window.Hls && window.Hls.isSupported()) {
-      const h = new window.Hls({ liveSyncDurationCount: 3, enableWorker: true });
+      const h = new window.Hls({ liveSyncDurationCount: 3, enableWorker: true,
+        fetchSetup: (ctx, init) => new Request(ctx.url, Object.assign({}, init, { referrerPolicy: "no-referrer" })) });
       estado.hls = h;
       let recuperado = false;
       h.on(window.Hls.Events.ERROR, (ev, d) => {
@@ -602,6 +605,8 @@
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
 
   // ---------- Inicio ----------
+  $("version").textContent = VERSION;
+  console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);
 })();

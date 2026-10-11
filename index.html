@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Sin Referer: IPCamLive puede restringir la cámara por sitio de origen y
+     entregar un cuadro negro o rechazar el stream. Así cada pedido se ve igual
+     que desde el archivo local, que funciona. -->
+<meta name="referrer" content="no-referrer">
 <title>Seguimiento Cámara Tata</title>
 <meta name="description" content="Seguimiento de altura de columna eruptiva e incandescencia nocturna del complejo volcánico Nevados de Chillán con la cámara Plaza Tata.">
 <link rel="stylesheet" href="styles.css">
@@ -123,7 +127,7 @@
 </main>
 
 <footer class="pie">
-  <p>Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
+  <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
 </footer>
 
 <canvas id="lienzo" hidden></canvas>

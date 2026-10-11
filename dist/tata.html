@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Sin Referer: IPCamLive puede restringir la cámara por sitio de origen y
+     entregar un cuadro negro o rechazar el stream. Así cada pedido se ve igual
+     que desde el archivo local, que funciona. -->
+<meta name="referrer" content="no-referrer">
 <title>Seguimiento Cámara Tata</title>
 <meta name="description" content="Seguimiento de altura de columna eruptiva e incandescencia nocturna del complejo volcánico Nevados de Chillán con la cámara Plaza Tata.">
 <style>
@@ -199,7 +203,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 </main>
 
 <footer class="pie">
-  <p>Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
+  <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
 </footer>
 
 <canvas id="lienzo" hidden></canvas>
@@ -271,6 +275,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
+  const VERSION = "2026-10-11 c";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -362,7 +367,7 @@ window.CAM_CONFIG = {
     for (let intento = 1; intento <= 3; intento++) {
       let j;
       try {
-        const r = await fetch(u, { cache: "no-store" });
+        const r = await fetch(u, { cache: "no-store", referrerPolicy: "no-referrer" });
         if (!r.ok) throw new Error("HTTP " + r.status);
         j = await r.json();
       } catch (e) {
@@ -436,7 +441,7 @@ window.CAM_CONFIG = {
     const f = document.createElement("iframe");
     f.src = urlIframe();
     f.allow = "autoplay; fullscreen";
-    f.referrerPolicy = "no-referrer-when-downgrade";
+    f.referrerPolicy = "no-referrer";
     medios.appendChild(f);
     estado.media = f; estado.tipoMedia = "iframe"; estado.pixelesOk = false;
     estado.aspecto = CFG.aspectoPorDefecto || 16 / 9;
@@ -450,6 +455,7 @@ window.CAM_CONFIG = {
     img.alt = "Cámara Plaza Tata";
     let conCors = true;
     img.crossOrigin = "anonymous";
+    img.referrerPolicy = "no-referrer";
     const cargar = () => { img.src = urlSnapshot() + (urlSnapshot().includes("?") ? "&" : "?") + "_=" + Date.now(); };
     img.addEventListener("load", () => {
       fijarAspecto(img.naturalWidth, img.naturalHeight);
@@ -502,7 +508,8 @@ window.CAM_CONFIG = {
     };
 
     if (window.Hls && window.Hls.isSupported()) {
-      const h = new window.Hls({ liveSyncDurationCount: 3, enableWorker: true });
+      const h = new window.Hls({ liveSyncDurationCount: 3, enableWorker: true,
+        fetchSetup: (ctx, init) => new Request(ctx.url, Object.assign({}, init, { referrerPolicy: "no-referrer" })) });
       estado.hls = h;
       let recuperado = false;
       h.on(window.Hls.Events.ERROR, (ev, d) => {
@@ -870,6 +877,8 @@ window.CAM_CONFIG = {
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
 
   // ---------- Inicio ----------
+  $("version").textContent = VERSION;
+  console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);
 })();
