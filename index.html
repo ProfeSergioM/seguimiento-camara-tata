@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seguimiento Cámara Tata</title>
+<meta name="description" content="Seguimiento de altura de columna eruptiva e incandescencia nocturna del complejo volcánico Nevados de Chillán con la cámara Plaza Tata.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="cabecera">
+  <div>
+    <h1>Cámara Tata · Nevados de Chillán</h1>
+    <p class="sub">Altura de columna e incandescencia nocturna. Calibración preliminar: 0 m en la cumbre, marcas cada 100 m.</p>
+  </div>
+  <div class="reloj" id="reloj">--:--:--</div>
+</header>
+
+<main>
+  <section class="visor">
+    <div class="escenario" id="escenario">
+      <div class="medios" id="medios"></div>
+      <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="aviso" id="aviso" hidden></div>
+    </div>
+
+    <div class="barra">
+      <div class="grupo" role="group" aria-label="Modo de interacción">
+        <button class="boton activo" data-modo="ver" id="btn-ver">Ver</button>
+        <button class="boton" data-modo="medir" id="btn-medir">Medir</button>
+        <button class="boton" data-modo="calibrar" id="btn-calibrar">Calibrar</button>
+      </div>
+      <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+      <div class="grupo">
+        <button class="boton" id="btn-registrar">Registrar</button>
+        <button class="boton" id="btn-capturar">Capturar PNG</button>
+      </div>
+    </div>
+    <p class="estado" id="estado">Sin fuente.</p>
+  </section>
+
+  <section class="paneles">
+    <details class="panel" open>
+      <summary>Fuente</summary>
+      <div class="campos">
+        <label>Alias IPCamLive <input id="in-alias" placeholder="p. ej. 1a2b3c4d" autocomplete="off"></label>
+        <label>Modo
+          <select id="in-modo">
+            <option value="hls">HLS (video, permite análisis)</option>
+            <option value="snapshot">Snapshot JPG periódico</option>
+            <option value="iframe">Reproductor oficial (iframe)</option>
+          </select>
+        </label>
+        <label>URL HLS directa (opcional) <input id="in-hls" placeholder="https://.../stream.m3u8"></label>
+        <label>URL snapshot directa (opcional) <input id="in-snap" placeholder="https://.../snapshot.php?alias=..."></label>
+        <label>Intervalo snapshot (s) <input id="in-int-snap" type="number" min="2" step="1"></label>
+        <div class="acciones">
+          <button class="boton primario" id="btn-conectar">Conectar</button>
+          <button class="boton" id="btn-abrir-cam">Abrir página de cámaras</button>
+        </div>
+        <p class="nota">El alias está en el <code>src</code> del iframe de ipcamlive.com que usa la página de cámaras del centro de ski.</p>
+      </div>
+    </details>
+
+    <details class="panel" id="panel-cal">
+      <summary>Calibración</summary>
+      <div class="campos">
+        <label>Columna de la escala x (px ref) <input id="cal-x" type="number" step="0.5"></label>
+        <label>Fila del 0 m y0 (px ref) <input id="cal-y0" type="number" step="0.5"></label>
+        <label>Píxeles por 100 m <input id="cal-px" type="number" step="0.1"></label>
+        <label>Altura máxima (m) <input id="cal-max" type="number" step="100"></label>
+        <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="618, 345, 120, 60"></label>
+        <div class="acciones">
+          <button class="boton primario" id="btn-cal-aplicar">Aplicar</button>
+          <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
+        </div>
+        <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta la cumbre, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles de un cuadro de referencia de 1393 px de ancho.</p>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary>Noche e incandescencia</summary>
+      <div class="campos">
+        <label>Brillo <input id="n-brillo" type="range" min="0.5" max="4" step="0.1" value="1"></label>
+        <label>Contraste <input id="n-contraste" type="range" min="0.5" max="3" step="0.1" value="1"></label>
+        <div class="acciones">
+          <button class="boton" id="btn-noche">Preset noche</button>
+          <button class="boton" id="btn-dia">Sin realce</button>
+        </div>
+        <label class="fila"><input id="n-muestreo" type="checkbox"> Muestrear índice de incandescencia automáticamente</label>
+        <label>Intervalo de muestreo (s) <input id="n-int" type="number" min="2" step="1"></label>
+        <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
+        <div class="indice" id="indice">Índice: <strong>--</strong></div>
+        <canvas id="grafico" class="grafico" width="800" height="160" aria-label="Índice de incandescencia en el tiempo"></canvas>
+        <div class="acciones">
+          <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
+          <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
+        </div>
+        <p class="nota">El índice es el porcentaje de píxeles rojizos o saturados dentro de la ROI sobre el cráter. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
+      </div>
+    </details>
+
+    <details class="panel" open>
+      <summary>Registro de observaciones</summary>
+      <div class="campos">
+        <label>Tipo
+          <select id="r-tipo">
+            <option value="columna">Columna de gases o ceniza</option>
+            <option value="incandescencia">Incandescencia nocturna</option>
+            <option value="explosion">Explosión o pulso</option>
+            <option value="sin-actividad">Sin actividad visible</option>
+            <option value="nubosidad">Sin visibilidad (nubes)</option>
+          </select>
+        </label>
+        <label>Nota <input id="r-nota" placeholder="observaciones"></label>
+        <div class="acciones">
+          <button class="boton" id="btn-exp-registro">Exportar registro CSV</button>
+          <button class="boton peligro" id="btn-borrar-registro">Borrar registro</button>
+        </div>
+        <div class="tabla-env">
+          <table id="tabla">
+            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Índice (%)</th><th>Nota</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+  </section>
+</main>
+
+<footer class="pie">
+  <p>Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
+</footer>
+
+<canvas id="lienzo" hidden></canvas>
+<script src="vendor/hls.light.min.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+# Seguimiento Cámara Tata
+
+Sitio estático para seguir la altura de la columna eruptiva y la incandescencia nocturna del complejo volcánico Nevados de Chillán usando la cámara pública Plaza Tata del centro de ski, publicada a través de IPCamLive.
+
+El sitio no necesita servidor ni compilación. Se puede publicar en GitHub Pages o usar como un único archivo HTML copiado a cualquier computador.
+
+## Qué hace
+
+- Muestra la cámara en vivo con una escala vertical calibrada sobre el cráter: 0 m en la cumbre y marcas cada 100 m hasta 500 m.
+- Permite medir la altura de la columna con un clic o arrastre sobre el video y registrar la observación con hora local de Chile.
+- Calcula un índice de incandescencia nocturna, definido como el porcentaje de píxeles rojizos o saturados dentro de una región de interés sobre el cráter, y lo grafica en el tiempo.
+- Ofrece realce de brillo y contraste para observación nocturna.
+- Guarda la calibración, el registro de observaciones y las muestras del índice en el navegador y las exporta a CSV.
+- Exporta capturas PNG con la escala, el marcador de altura y la hora impresos sobre el cuadro.
+
+## Cómo obtener el alias de la cámara
+
+1. Abra https://www.nevadosdechillan.com/camaras en el navegador.
+2. Con clic derecho sobre el reproductor de Plaza Tata elija Inspeccionar, o vea el código fuente de la página.
+3. Busque un iframe con un `src` del tipo `https://ipcamlive.com/player/player.php?alias=XXXXXXXX`. El valor de `alias` es lo que necesita.
+
+Si se prefiere, la pestaña Red de las herramientas de desarrollo muestra también la URL del stream HLS (termina en `stream.m3u8`) y la URL del snapshot JPG. Ambas se pueden pegar directamente en el panel Fuente del sitio.
+
+## Configuración
+
+Edite `config.js` para dejar el alias fijo y elegir el modo inicial:
+
+| Modo | Qué muestra | Medición | Índice de incandescencia |
+|---|---|---|---|
+| `hls` | Video en vivo con hls.js | Sí | Sí, si el servidor permite leer píxeles (CORS) |
+| `snapshot` | Imagen JPG cada N segundos | Sí | Sí, con la misma condición |
+| `iframe` | Reproductor oficial de IPCamLive | Sí | No |
+
+Todo lo que se cambie desde la interfaz queda guardado en el navegador y tiene prioridad sobre `config.js`.
+
+## Publicar en GitHub Pages
+
+1. En el repositorio, vaya a Settings, luego Pages.
+2. En Source elija Deploy from a branch, seleccione la rama y la carpeta raíz.
+3. En unos minutos el sitio queda en `https://<usuario>.github.io/seguimiento-camara-tata/`.
+
+## Generar un solo archivo HTML
+
+```bash
+python3 scripts/exportar_html_unico.py
+```
+
+Escribe `dist/tata.html` con el CSS, la lógica, la configuración y hls.js embebidos. Ese archivo se copia a cualquier computador y se abre con doble clic en Chrome, Edge o Firefox. El registro y la calibración se guardan en el navegador de esa máquina; use Exportar CSV para llevarse los datos.
+
+## Uso
+
+- **Ver**: el video responde normalmente al mouse. En modo iframe se pueden usar los controles del reproductor.
+- **Medir**: un clic o arrastre sobre el video coloca una línea horizontal y muestra la altura sobre la cumbre, redondeada a 10 m. El botón Registrar guarda la hora, el tipo de actividad, la altura, el índice de incandescencia y una nota.
+- **Calibrar**: aparecen tres manijas. El punto celeste (0 m) se arrastra hasta la cumbre, el punto verde (500 m) fija la escala y el rectángulo rojo es la región de interés para incandescencia. También se pueden escribir los valores en el panel Calibración.
+- **Noche**: active el muestreo automático para que el índice se calcule cada N segundos. Cuando supera el umbral, la lectura se marca en rojo. Los presets de brillo y contraste solo afectan la visualización, no el análisis.
+
+## Calibración preliminar
+
+La calibración viene de una captura de 1393 × 667 px en la que la escala se dibujó a mano. Las coordenadas se expresan en píxeles de ese cuadro de referencia y se reescalan al tamaño real del video. La imagen está en `docs/calibracion_preliminar.jpg`.
+
+| Parámetro | Valor | Significado |
+|---|---|---|
+| x | 678 | columna de la escala, sobre el cráter |
+| y0 | 380.5 | fila del 0 m, en la cumbre |
+| píxeles por 100 m | 47.5 | separación entre marcas |
+| altura máxima | 500 m | extensión de la escala |
+
+Supuestos y limitaciones que conviene tener presentes:
+
+- La altura se mide sobre la cumbre visible, suponiendo que la columna sube en vertical y en el mismo plano que el cráter. Una columna inclinada por el viento o desplazada hacia la cámara o hacia atrás cambia la escala aparente.
+- La escala de 47.5 px por 100 m es preliminar y debe verificarse con una referencia conocida, por ejemplo la distancia entre dos puntos de altitud conocida en la misma línea visual. Hasta entonces las alturas son estimaciones.
+- La captura usada tiene una relación de aspecto distinta de 16:9, por lo que la posición vertical puede quedar levemente desplazada en el video real. El modo Calibrar permite corregirlo arrastrando el 0 m a la cumbre y se guarda en el navegador.
+- Si la cámara cambia de encuadre o de zoom, la calibración deja de valer y hay que repetirla.
+
+## Registro automático desde un computador
+
+`scripts/monitor.py` captura un cuadro cada N minutos, lo guarda, dibuja la escala y calcula el índice de incandescencia. Sirve para dejar un registro continuo sin tener el navegador abierto.
+
+```bash
+pip install pillow
+python3 scripts/monitor.py --alias XXXXXXXX --intervalo 5 --salida datos
+```
+
+Opciones principales: `--modo hls` usa ffmpeg para tomar el cuadro del stream, `--snapshot-url` y `--hls-url` aceptan URLs directas, `--una-vez` captura una sola vez y `--calib X Y0 PX100` y `--roi X Y W H` sobrescriben la calibración. La salida queda en `datos/cuadros` (cuadros crudos), `datos/cuadros_escala` (con escala e índice) y `datos/registro.csv`.
+
+## Notas técnicas
+
+- Las URLs de IPCamLive usadas son las del reproductor público: `player.php?alias=`, `snapshot.php?alias=` y `getcamerastreamstate.php?cameraalias=`, de la cual se deriva el `stream.m3u8`. Si IPCamLive cambia su API, basta con pegar la URL HLS o de snapshot directa en el panel Fuente.
+- El análisis de píxeles exige que el servidor envíe cabeceras CORS. Si no lo hace, el sitio lo indica en la línea de estado y queda disponible la clasificación manual. El script `monitor.py` no tiene esta limitación.
+- hls.js está incluido en `vendor/` (licencia Apache 2.0) para no depender de un CDN.
+- Los CSV usan punto y coma como separador para abrirse directamente en Excel en configuración regional chilena.
