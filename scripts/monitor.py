@@ -53,16 +53,28 @@ def descargar(url, destino):
 
 
 def url_hls(alias):
-    u = "https://ipcamlive.com/player/getcamerastreamstate.php?cameraalias=" + alias
-    req = urllib.request.Request(u, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        j = json.loads(r.read().decode("utf-8"))
-    d = j.get("details", j)
-    addr = d.get("address") or d.get("streamaddress")
-    sid = d.get("streamid") or d.get("streamId")
-    if not addr or not sid:
-        raise RuntimeError("respuesta sin address/streamid; use --hls-url")
-    return f"https://{addr}/streams/{sid}/stream.m3u8"
+    """Consulta a IPCamLive la URL vigente del stream HLS para un alias.
+
+    details.address viene con esquema y barra final, por ejemplo
+    "https://s58.ipcamlive.com/". El stream se activa a pedido, así que se
+    reintenta unos segundos si todavía no hay streamid.
+    """
+    u = "https://ipcamlive.com/player/getcamerastreamstate.php?alias=" + alias
+    for _ in range(3):
+        req = urllib.request.Request(u, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        d = j.get("details", j)
+        addr = d.get("address") or ""
+        sid = d.get("streamid") or ""
+        if addr and sid:
+            if not addr.lower().startswith(("http://", "https://")):
+                addr = "https://" + addr
+            if not addr.endswith("/"):
+                addr += "/"
+            return f"{addr}streams/{sid}/stream.m3u8"
+        time.sleep(3)
+    raise RuntimeError("IPCamLive no entregó un stream activo; use --hls-url")
 
 
 def cuadro_hls(url, destino):

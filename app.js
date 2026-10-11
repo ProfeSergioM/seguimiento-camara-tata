@@ -77,17 +77,35 @@
   function urlIframe() {
     return "https://ipcamlive.com/player/player.php?alias=" + encodeURIComponent(estado.ajustes.alias) + "&autoplay=1";
   }
+  // URL del stream HLS. IPCamLive no publica una URL fija: la consulta
+  // getcamerastreamstate.php?alias=... devuelve details.address (con
+  // esquema y barra final, p. ej. "https://s58.ipcamlive.com/") y
+  // details.streamid, que cambian de vez en cuando.
   async function urlHls() {
     if (estado.ajustes.hlsUrl) return estado.ajustes.hlsUrl;
-    const u = "https://ipcamlive.com/player/getcamerastreamstate.php?cameraalias=" + encodeURIComponent(estado.ajustes.alias);
-    const r = await fetch(u, { cache: "no-store" });
-    if (!r.ok) throw new Error("estado de stream: HTTP " + r.status);
-    const j = await r.json();
-    const d = j.details || j;
-    const addr = d.address || d.streamaddress || d.host;
-    const sid = d.streamid || d.streamId || d.id;
-    if (!addr || !sid) throw new Error("respuesta sin address/streamid; indique la URL HLS directa");
-    return "https://" + addr + "/streams/" + sid + "/stream.m3u8";
+    const u = "https://ipcamlive.com/player/getcamerastreamstate.php?alias=" + encodeURIComponent(estado.ajustes.alias) + "&_=" + Date.now();
+    for (let intento = 1; intento <= 3; intento++) {
+      let j;
+      try {
+        const r = await fetch(u, { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        j = await r.json();
+      } catch (e) {
+        throw new Error("no se pudo consultar el estado del stream (" + e.message + ")");
+      }
+      const d = j.details || j;
+      let addr = d.address || "";
+      const sid = d.streamid || "";
+      if (addr && sid) {
+        if (!/^https?:\/\//i.test(addr)) addr = "https://" + addr;
+        if (!addr.endsWith("/")) addr += "/";
+        return addr + "streams/" + sid + "/stream.m3u8";
+      }
+      // El stream se activa a pedido; puede tardar unos segundos en aparecer.
+      setEstado("Esperando que IPCamLive active el stream (intento " + intento + " de 3)...");
+      await new Promise((ok) => setTimeout(ok, 3000));
+    }
+    throw new Error("IPCamLive no entregó un stream activo para el alias " + estado.ajustes.alias);
   }
 
   function desconectar() {
@@ -107,6 +125,7 @@
 
   async function conectar() {
     desconectar();
+    estado.mensajeRespaldo = "";
     const a = estado.ajustes;
     if (!a.alias && !a.hlsUrl && !a.snapshotUrl) {
       mostrarAviso("Indique el alias de IPCamLive en el panel Fuente y pulse Conectar.");
@@ -119,9 +138,22 @@
       else if (a.modo === "snapshot") conectarSnapshot();
       else await conectarHls();
     } catch (e) {
-      setEstado("Error al conectar: " + e.message);
-      mostrarAviso("No se pudo abrir la fuente en modo " + a.modo + ". " + e.message + ". Pruebe otro modo.");
+      if (a.modo === "hls" && a.alias) respaldoSnapshot(e.message);
+      else {
+        setEstado("Error al conectar: " + e.message);
+        mostrarAviso("No se pudo abrir la fuente en modo " + a.modo + ". " + e.message + ". Pruebe otro modo.");
+      }
     }
+  }
+
+  // Si el video falla, se sigue con snapshots para no perder la cámara.
+  function respaldoSnapshot(motivo) {
+    desconectar();
+    conectarSnapshot();
+    const msg = "HLS falló: " + motivo + ". Usando snapshot.";
+    estado.mensajeRespaldo = msg;
+    setEstado(msg);
+    console.warn(msg);
   }
 
   function conectarIframe() {
@@ -146,7 +178,7 @@
       fijarAspecto(img.naturalWidth, img.naturalHeight);
       estado.ultimoCuadro = new Date();
       if (estado.pixelesOk === null) probarPixeles();
-      setEstado("Snapshot " + img.naturalWidth + "×" + img.naturalHeight + " · último cuadro " + horaLocal(estado.ultimoCuadro) +
+      setEstado((estado.mensajeRespaldo ? estado.mensajeRespaldo + " · " : "") + "Snapshot " + img.naturalWidth + "×" + img.naturalHeight + " · último cuadro " + horaLocal(estado.ultimoCuadro) +
         (estado.pixelesOk ? " · análisis de píxeles disponible" : " · sin acceso a píxeles (CORS)"));
     });
     img.addEventListener("error", () => {
@@ -176,12 +208,16 @@
     if (window.Hls && window.Hls.isSupported()) {
       const h = new window.Hls({ liveSyncDurationCount: 3, enableWorker: true });
       estado.hls = h;
+      let fallos = 0;
       h.on(window.Hls.Events.ERROR, (ev, d) => {
-        if (d.fatal) {
-          setEstado("Error HLS: " + d.type + " " + (d.details || ""));
-          if (d.type === window.Hls.ErrorTypes.NETWORK_ERROR) h.startLoad(); else if (d.type === window.Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
-        }
+        if (!d.fatal) return;
+        fallos++;
+        const detalle = d.type + " " + (d.details || "") + (d.response && d.response.code != null ? " (HTTP " + d.response.code + ")" : "");
+        if (fallos > 3) { respaldoSnapshot(detalle); return; }
+        setEstado("Error HLS: " + detalle + ". Reintentando (" + fallos + " de 3)...");
+        if (d.type === window.Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError(); else h.startLoad();
       });
+      h.on(window.Hls.Events.FRAG_LOADED, () => { fallos = 0; });
       h.loadSource(url); h.attachMedia(v);
       h.on(window.Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {}));
     } else if (v.canPlayType("application/vnd.apple.mpegurl")) {

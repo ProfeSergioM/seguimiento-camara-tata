@@ -92,7 +92,8 @@ Opciones principales: `--modo hls` usa ffmpeg para tomar el cuadro del stream, `
 
 ## Notas técnicas
 
-- Las URLs de IPCamLive usadas son las del reproductor público: `player.php?alias=`, `snapshot.php?alias=` y `getcamerastreamstate.php?cameraalias=`, de la cual se deriva el `stream.m3u8`. Si IPCamLive cambia su API, basta con pegar la URL HLS o de snapshot directa en el panel Fuente.
+- Las URLs de IPCamLive usadas son las del reproductor público: `player.php?alias=`, `snapshot.php?alias=` y `getcamerastreamstate.php?alias=`. Esta última devuelve `details.address` y `details.streamid`, con los que se arma `<address>streams/<streamid>/stream.m3u8`. La URL del stream cambia de vez en cuando, por eso se consulta en cada conexión. Si IPCamLive cambia su API, basta con pegar la URL HLS o de snapshot directa en el panel Fuente.
+- Si el modo HLS falla, el sitio cambia solo a snapshot y la línea de estado muestra el motivo.
 - El análisis de píxeles exige que el servidor envíe cabeceras CORS. Si no lo hace, el sitio lo indica en la línea de estado y queda disponible la clasificación manual. El script `monitor.py` no tiene esta limitación.
 - hls.js está incluido en `vendor/` (licencia Apache 2.0) para no depender de un CDN.
 - Los CSV usan punto y coma como separador para abrirse directamente en Excel en configuración regional chilena.
