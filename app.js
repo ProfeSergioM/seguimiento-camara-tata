@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 m";
+  const VERSION = "2026-10-12 n";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -30,7 +30,7 @@
       umbral: CFG.umbralIncandescencia != null ? CFG.umbralIncandescencia : 2,
       umbralBrillo: CFG.umbralBrillo != null ? CFG.umbralBrillo : 200,
       detector: "auto",
-      umbralCeniza: CFG.umbralCeniza != null ? CFG.umbralCeniza : 1,
+      umbralCeniza: CFG.umbralCeniza != null ? CFG.umbralCeniza : 5,
       umbralCalidez: CFG.umbralCalidez != null ? CFG.umbralCalidez : 12,
       umbralOscuro: CFG.umbralOscuro != null ? CFG.umbralOscuro : 25,
       muestreo: false,
@@ -56,6 +56,14 @@
     ultimoCuadro: null,
     ultimoIndice: null
   };
+
+  // Migración de ajustes guardados: el umbral de ceniza por defecto pasó de
+  // 1 % a 5 % (versión 2 de los ajustes).
+  if (!(estado.ajustes.version >= 2)) {
+    if (estado.ajustes.umbralCeniza === 1) estado.ajustes.umbralCeniza = CFG.umbralCeniza != null ? CFG.umbralCeniza : 5;
+    estado.ajustes.version = 2;
+    guardar(LS.ajustes, estado.ajustes);
+  }
 
   function leer(k, def) {
     try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; }

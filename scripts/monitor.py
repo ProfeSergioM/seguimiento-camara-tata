@@ -457,7 +457,7 @@ def main():
     ap.add_argument("--umbral-brillo", type=float, default=200, help="luminancia (0 a 255) desde la cual un píxel cuenta como brillante")
     ap.add_argument("--detector", choices=["auto", "ceniza", "incand"], default="auto",
                     help="auto: ceniza de día e incandescencia de noche, según la imagen")
-    ap.add_argument("--umbral-ceniza", type=float, default=1.0, help="índice de ceniza (%%) para marcar posible emisión")
+    ap.add_argument("--umbral-ceniza", type=float, default=5.0, help="índice de ceniza (%%) para marcar posible emisión")
     ap.add_argument("--umbral-calidez", type=float, default=12, help="aumento mínimo de R − B de un píxel sobre su fondo")
     ap.add_argument("--umbral-oscuro", type=float, default=25, help="baja mínima de luminancia de un píxel bajo su fondo")
     ap.add_argument("--tau-fondo", type=float, default=600, help="constante de tiempo del fondo de ceniza, en segundos")

@@ -64,7 +64,9 @@ window.CAM_CONFIG = {
   //   umbralCalidez : aumento mínimo de R − B de un píxel sobre su fondo
   //   umbralOscuro  : baja mínima de luminancia de un píxel bajo su fondo
   zonaColumna: { x: 700, y: 0, w: 1200, h: 560 },
-  umbralCeniza: 1,
+  // 5 % separó, en la secuencia real del 12-10-2026, las nubes del amanecer
+  // (hasta 3.3 %) del inicio de la emisión (7.6 %).
+  umbralCeniza: 5,
   umbralCalidez: 12,
   umbralOscuro: 25,
 
