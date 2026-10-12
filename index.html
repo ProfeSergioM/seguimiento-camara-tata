@@ -38,6 +38,7 @@
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
       <button class="boton" id="btn-inserto" title="Mostrar u ocultar el recuadro de detección de incandescencia (tecla Z)">Detección</button>
+      <button class="boton" id="btn-silueta" title="Mostrar u ocultar la silueta del volcán (tecla S)">Silueta</button>
       <button class="boton" id="btn-marco" title="Mostrar u ocultar el marco de la zona de detección sobre la imagen (tecla R)">Marco</button>
       <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
       <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
@@ -128,6 +129,13 @@
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
         </div>
         <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta la cumbre, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles del cuadro nativo de la cámara, de 1920 × 1080 px.</p>
+        <h3 class="subtitulo">Silueta del volcán</h3>
+        <div class="acciones">
+          <button class="boton" id="btn-trazar-silueta" title="Trazar la silueta desde la imagen actual">Trazar silueta</button>
+          <button class="boton" id="btn-copiar-silueta" title="Copiar la silueta para pegarla en config.js">Copiar</button>
+          <button class="boton peligro" id="btn-borrar-silueta">Borrar</button>
+        </div>
+        <p class="nota" id="silueta-nota">Trace la silueta con el cielo despejado y sin emisión. Sirve de referencia visual; no interviene en las mediciones.</p>
       </div>
     </details>
 
@@ -191,7 +199,7 @@
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, S silueta, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
   </footer>
 </aside>
 

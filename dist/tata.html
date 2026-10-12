@@ -177,6 +177,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
       <button class="boton" id="btn-inserto" title="Mostrar u ocultar el recuadro de detección de incandescencia (tecla Z)">Detección</button>
+      <button class="boton" id="btn-silueta" title="Mostrar u ocultar la silueta del volcán (tecla S)">Silueta</button>
       <button class="boton" id="btn-marco" title="Mostrar u ocultar el marco de la zona de detección sobre la imagen (tecla R)">Marco</button>
       <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
       <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
@@ -267,6 +268,13 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
         </div>
         <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta la cumbre, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles del cuadro nativo de la cámara, de 1920 × 1080 px.</p>
+        <h3 class="subtitulo">Silueta del volcán</h3>
+        <div class="acciones">
+          <button class="boton" id="btn-trazar-silueta" title="Trazar la silueta desde la imagen actual">Trazar silueta</button>
+          <button class="boton" id="btn-copiar-silueta" title="Copiar la silueta para pegarla en config.js">Copiar</button>
+          <button class="boton peligro" id="btn-borrar-silueta">Borrar</button>
+        </div>
+        <p class="nota" id="silueta-nota">Trace la silueta con el cielo despejado y sin emisión. Sirve de referencia visual; no interviene en las mediciones.</p>
       </div>
     </details>
 
@@ -330,7 +338,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, S silueta, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
   </footer>
 </aside>
 
@@ -418,13 +426,14 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 d";
+  const VERSION = "2026-10-12 e";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
     calib: "tata.calib.v2",
     roi: "tata.roi.v2",
     zonaCol: "tata.zonacol.v1",
+    silueta: "tata.silueta.v1",
     registro: "tata.registro",
     muestras: "tata.muestras"
   };
@@ -454,6 +463,7 @@ window.CAM_CONFIG = {
     roi: Object.assign({}, CFG.roi || { x: 808, y: 525, w: 120, h: 68 }, leer(LS.roi, {})),
     zonaCol: Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 }, leer(LS.zonaCol, {})),
     modoDet: "incand",        // detector en uso: "incand" (noche) o "ceniza" (día)
+    silueta: leer("tata.silueta.v1", null) || CFG.silueta || null,   // [[x, y] | null, ...] en px ref
     registro: leer(LS.registro, []),
     muestras: leer(LS.muestras, []),
     modoUi: "ver",
@@ -943,6 +953,79 @@ window.CAM_CONFIG = {
       mancha: m ? medirEnMetros(m, { ox: z.x, oy: z.y, sx, sy, f: z.f }, wm, hm) : null });
   }
 
+  // ---------- Silueta del volcán ----------
+  // Se traza desde la imagen actual, idealmente con cielo despejado y sin
+  // emisión. Por cada columna se baja desde el cielo y se marca el primer
+  // punto que se aparta de forma sostenida del color del cielo que viene
+  // justo encima (promedio móvil de luminancia y de R − B). Luego se filtra
+  // con una mediana a lo largo de la línea y se descartan saltos.
+  function trazarSilueta() {
+    if (!estado.pixelesOk) return { error: "sin acceso a píxeles (CORS)" };
+    const z = rectEnCuadro({ x: 0, y: 0, w: REF_W, h: refH() });
+    if (!z) return { error: "sin imagen" };
+    const w = 960, h = Math.round(960 * z.H / z.W);
+    let d;
+    try { d = leerRect(lienzoMini, z, w, h).data; } catch (e) { return { error: "sin acceso a píxeles (CORS)" }; }
+    const L = (x, y) => { const i = (y * w + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+    const RB = (x, y) => { const i = (y * w + x) * 4; return d[i] - d[i + 2]; };
+    const PASO = 2, yMax = Math.round(0.85 * h), crudo = [];
+    for (let x = 0; x < w; x += PASO) {
+      // Saltar la carcasa oscura de la cámara (arco negro en la esquina) y
+      // su borde difuso. Un borde hallado justo bajo la carcasa no cuenta.
+      let y = 0;
+      while (y < yMax && L(x, y) < 25) y++;
+      const conCarcasa = y > 0;
+      y += conCarcasa ? 20 : 3;
+      const yInicio = y;
+      if (y + 12 >= yMax) { crudo.push(null); continue; }
+      let mL = 0, mRB = 0, v = 0;
+      for (let k = 0; k < 8; k++) { mL += L(x, y + k); mRB += RB(x, y + k); }
+      mL /= 8; mRB /= 8; y += 8;
+      let fuera = 0, borde = null;
+      for (; y < yMax; y++) {
+        const l = L(x, y), rb = RB(x, y);
+        const dist = Math.hypot(l - mL, 1.5 * (rb - mRB));
+        if (dist > Math.max(14, 3 * Math.sqrt(v))) {
+          if (++fuera >= 4) { borde = y - 3; break; }
+        } else {
+          fuera = 0;
+          mL += 0.1 * (l - mL); mRB += 0.1 * (rb - mRB);
+          v += 0.1 * (dist * dist - v);
+        }
+      }
+      // Un borde en el 10 % superior del cuadro o pegado a la carcasa no es
+      // la silueta, sino el halo de la carcasa o ruido.
+      const dudoso = borde != null && ((conCarcasa && borde - yInicio < 30) || borde < 0.1 * h);
+      crudo.push(dudoso ? null : borde);
+    }
+    const n = crudo.length, puntos = [];
+    for (let i = 0; i < n; i++) {
+      const vec = crudo.slice(Math.max(0, i - 3), i + 4).filter(q => q != null).sort((a, b) => a - b);
+      const med = vec.length ? vec[vec.length >> 1] : null;
+      const ok = crudo[i] != null && med != null && Math.abs(crudo[i] - med) <= 6;
+      const f = REF_W / w;
+      puntos.push(ok ? [Math.round(i * PASO * f), Math.round(med * f)] : null);
+    }
+    const validos = puntos.filter(Boolean).length;
+    return { puntos, validos, total: n };
+  }
+  function dibujarSilueta() {
+    const sil = estado.silueta;
+    if (!sil || estado.ajustes.silueta === false) return;
+    let tramo = [];
+    const g = el("g", { fill: "none", stroke: "rgba(255,240,150,0.75)", "stroke-width": 1.4, "stroke-linejoin": "round", "pointer-events": "none" });
+    const cerrar = () => { if (tramo.length > 1) g.appendChild(el("polyline", { points: tramo.map(p => p.join(",")).join(" ") })); tramo = []; };
+    // Se corta la línea en los huecos y en los saltos verticales grandes.
+    for (const p of sil) {
+      if (!p) { cerrar(); continue; }
+      const u = tramo[tramo.length - 1];
+      if (u && Math.abs(p[1] - u[1]) > 40) cerrar();
+      tramo.push(p);
+    }
+    cerrar();
+    overlay.appendChild(g);
+  }
+
   // ---------- Análisis periódico ----------
   // Cada segundo: se caracteriza el cuadro, se elige el detector y se
   // analizan la ROI del cráter y, si la imagen está en color, la zona de
@@ -1199,6 +1282,7 @@ window.CAM_CONFIG = {
       const y = yDesdeAltura(h);
       linea(c.x - 3.5, y, c.x + 3.5, y, 1);
     }
+    dibujarSilueta();
     overlay.appendChild(g);
 
     // Marcador de medición
@@ -1499,6 +1583,38 @@ window.CAM_CONFIG = {
   }
   $("btn-borrar-medida").addEventListener("click", borrarMedida);
 
+  function mostrarSilueta(ver) {
+    estado.ajustes.silueta = ver; guardar(LS.ajustes, estado.ajustes);
+    $("btn-silueta").classList.toggle("activo", ver);
+    dibujarOverlay();
+  }
+  $("btn-silueta").addEventListener("click", () => {
+    if (!estado.silueta) { $("panel-cal").open = true; abrirMenu(true); return; }
+    mostrarSilueta(estado.ajustes.silueta === false);
+  });
+  $("btn-trazar-silueta").addEventListener("click", () => {
+    const r = trazarSilueta();
+    const nota = $("silueta-nota");
+    if (r.error) { nota.textContent = "No se pudo trazar: " + r.error + "."; return; }
+    if (r.validos < 0.5 * r.total) { nota.textContent = "Solo se encontró el borde en " + r.validos + " de " + r.total + " columnas. Pruebe con el cielo más despejado."; }
+    else nota.textContent = "Silueta trazada en " + r.validos + " de " + r.total + " columnas, " + horaLocal(new Date()) + ".";
+    estado.silueta = r.puntos; guardar(LS.silueta, r.puntos);
+    mostrarSilueta(true);
+  });
+  $("btn-borrar-silueta").addEventListener("click", () => {
+    estado.silueta = CFG.silueta || null;
+    try { localStorage.removeItem(LS.silueta); } catch (e) {}
+    $("silueta-nota").textContent = estado.silueta ? "Se volvió a la silueta de la configuración." : "Silueta borrada.";
+    dibujarOverlay();
+  });
+  $("btn-copiar-silueta").addEventListener("click", () => {
+    if (!estado.silueta) { $("silueta-nota").textContent = "No hay silueta que copiar."; return; }
+    const texto = "silueta: " + JSON.stringify(estado.silueta) + ",";
+    (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject())
+      .then(() => { $("silueta-nota").textContent = "Copiada. Péguela en config.js para dejarla fija."; })
+      .catch(() => { $("silueta-nota").textContent = "No se pudo copiar al portapapeles."; });
+  });
+
   // ---------- Barra superior, panel lateral y pantalla completa ----------
   document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
     estado.ajustes.modo = b.dataset.fuente;
@@ -1546,12 +1662,14 @@ window.CAM_CONFIG = {
     else if (k === "f") pantallaCompleta();
     else if (k === "z") mostrarInserto($("inserto").hidden);
     else if (k === "r") mostrarMarco(estado.ajustes.marco === false);
+    else if (k === "s" && estado.silueta) mostrarSilueta(estado.ajustes.silueta === false);
   });
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;
   mostrarInserto(estado.ajustes.inserto !== false);
   mostrarMarco(estado.ajustes.marco !== false);
+  $("btn-silueta").classList.toggle("activo", !!estado.silueta && estado.ajustes.silueta !== false);
   console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);
