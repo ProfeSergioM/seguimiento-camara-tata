@@ -168,7 +168,11 @@ En el script de monitoreo, el modelo analiza un recorte alrededor del volcán (`
 
 Conviene tener presente la resolución. El modelo trabaja en una grilla de 37 × 37 celdas sobre su entrada de 518 × 518 px. Con el cuadro completo, cada celda cubre unos 52 × 29 px de la cámara, unos 95 × 55 m en el plano del cráter; con el recorte por defecto, unos 24 × 14 px. Por eso el modelo sirve para clasificar la emisión, ceniza o gas, más que para medir su borde. Para la silueta, el trazado por color del sitio es más preciso con cielo despejado.
 
-Estado: la integración está escrita según el código del repositorio original, pero todavía no se ha probado con los pesos reales.
+Estado de las pruebas con el modelo real, sobre CPU, de 4 a 9 s por imagen:
+
+- Con las imágenes de ejemplo del repositorio original, la integración reproduce lo esperado. Por ejemplo, en Stromboli marca la columna de ceniza como columna eruptiva y las desgasificaciones blancas como gas.
+- Con un cuadro diurno de esta cámara sin emisión, el recorte alrededor del volcán no marcó emisiones. El cuadro completo marcó como gas un 2.6 % de nubes altas.
+- Una columna simulada, una franja café translúcida agregada a una foto real, no fue detectada. Esa simulación no tiene la textura de una columna real, así que la prueba no es concluyente. Falta probar con emisiones reales de esta cámara.
 
 ## Notas técnicas
 
