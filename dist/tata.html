@@ -67,6 +67,16 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .estado { position: fixed; left: 12px; bottom: 10px; z-index: 10; margin: 0; max-width: calc(100vw - 24px); padding: 4px 8px; border-radius: 6px;
   background: var(--vidrio); color: var(--texto-suave); font-size: 0.8rem; transition: opacity 0.3s; }
 
+/* ---------- Medida fija de la columna o de la incandescencia ---------- */
+.medida-fija { position: fixed; top: 64px; left: 12px; z-index: 10; padding: 6px 12px; border-radius: var(--radio);
+  background: rgba(10, 14, 20, 0.8); border-left: 4px solid var(--color-medida, rgb(232, 170, 90));
+  font-size: clamp(15px, 1.15vw, 20px); line-height: 1.45; font-variant-numeric: tabular-nums; pointer-events: none; }
+.medida-fija[hidden] { display: none; }
+.medida-fija .etq { color: var(--texto-suave); font-weight: 400; }
+.medida-fija strong { color: var(--color-medida, rgb(232, 170, 90)); font-weight: 650; }
+.medida-fija .pn strong { color: rgb(214, 160, 70); }
+.app.oculta .medida-fija { opacity: 1; }
+
 /* ---------- Recuadro de la zona de detección ---------- */
 .inserto { position: fixed; left: 12px; bottom: 44px; width: max-content; z-index: 10; padding: 8px 10px 8px; border-radius: var(--radio);
   background: var(--vidrio); border: 1px solid var(--borde); backdrop-filter: blur(4px); max-width: calc(100vw - 24px); }
@@ -230,6 +240,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
       <p class="graf-lectura" id="graf-lectura"></p>
     </div>
   </section>
+
+  <div class="medida-fija" id="medida-fija" hidden aria-live="polite"></div>
 
   <p class="estado" id="estado">Sin fuente.</p>
 </main>
@@ -480,7 +492,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 l";
+  const VERSION = "2026-10-12 m";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -1398,22 +1410,17 @@ window.CAM_CONFIG = {
       const colorGuia = COLOR_GUIA[mm.modo] || COLOR_GUIA.incand;
       const gm = el("g", { stroke: colorGuia, fill: "none", "stroke-width": 1.2, "pointer-events": "none" });
       gm.appendChild(el("rect", { x: mm.izqRef, y: mm.topRef, width: mm.derRef - mm.izqRef, height: mm.botRef - mm.topRef }));
-      // Etiqueta con fondo oscuro, legible sobre cielo, nubes o nieve. Va a
-      // la derecha de la mancha si cabe; si no, a la izquierda. Nunca queda
-      // bajo la barra superior ni fuera de la imagen.
-      const txt = (mm.modo === "ceniza" ? "columna " : "tope ") + fmtM(mm.topeM) + (mm.corteArriba ? " o más" : "") +
-        " · alto " + fmtTam(mm.altoM) + " · ancho " + fmtTam(mm.anchoM);
-      const anchoEt = Math.round(txt.length * 16 * 0.56) + 14, H = refH();
-      const derecha = mm.derRef + 16 + anchoEt <= REF_W - 8;
+      // Cota vertical junto a la mancha, a la derecha si hay espacio. El
+      // texto de la medida va fijo en la esquina (medida-fija), para que no
+      // se mueva con la columna.
+      const derecha = mm.derRef + 16 <= REF_W - 8;
       const xc = derecha ? (mm.modo === "ceniza" ? mm.derRef + 8 : Math.max(mm.derRef, r.x + r.w) + 8) : mm.izqRef - 8;
-      const xEt = derecha ? xc + 8 : Math.max(8, xc - 8 - anchoEt);
-      const yEt = Math.min(H - 30, Math.max(85, mm.topRef));
       gm.appendChild(el("line", { x1: derecha ? mm.derRef : mm.izqRef, y1: mm.topRef, x2: xc + (derecha ? 4 : -4), y2: mm.topRef, "stroke-dasharray": "3 2" }));
       gm.appendChild(el("line", { x1: xc, y1: mm.topRef, x2: xc, y2: mm.botRef }));
       gm.appendChild(el("line", { x1: xc - 3, y1: mm.botRef, x2: xc + 3, y2: mm.botRef }));
       overlay.appendChild(gm);
-      overlay.appendChild(etiqueta(xEt, yEt, txt, colorGuia));
     }
+    actualizarMedidaFija();
     if (estado.modoUi === "calibrar") {
       overlay.appendChild(el("circle", { cx: c.x, cy: c.y0, r: 10, fill: "#4cc9f0", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "base" }));
       overlay.appendChild(el("circle", { cx: c.x, cy: yTop, r: 10, fill: "#52b788", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "tope" }));
@@ -1428,6 +1435,27 @@ window.CAM_CONFIG = {
         "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "zona de columna (ceniza)"));
     }
     actualizarLectura();
+  }
+
+  // Texto fijo con la medida de la mancha del detector activo y, si hay un
+  // resultado reciente, la de VIGIA-PlumeNet.
+  function actualizarMedidaFija() {
+    const caja = $("medida-fija"), mm = estado.mancha, p = estado.pn;
+    const visible = !$("inserto").hidden;
+    const lineas = [];
+    if (visible && mm) {
+      const nombre = mm.modo === "ceniza" ? "Columna" : "Incandescencia";
+      lineas.push('<span class="etq">' + nombre + ':</span> tope <strong>' + fmtM(mm.topeM) + (mm.corteArriba ? " o más" : "") +
+        '</strong> · alto <strong>' + fmtTam(mm.altoM) + '</strong> · ancho <strong>' + fmtTam(mm.anchoM) + '</strong>');
+      caja.style.setProperty("--color-medida", COLOR_GUIA[mm.modo] || COLOR_GUIA.incand);
+    }
+    if (visible && p && p.colCeniza && Date.now() - p.t < 2 * 1000 * Math.max(5, estado.ajustes.pnIntervalo || 30)) {
+      const c = p.colCeniza;
+      lineas.push('<span class="pn"><span class="etq">PlumeNet:</span> ceniza <strong>' + p.ceniza.toFixed(1) + ' %</strong> · tope <strong>' +
+        (c.corteArriba ? "≥ " : "") + fmtM(c.topeM) + '</strong></span>');
+    }
+    caja.hidden = !lineas.length;
+    caja.innerHTML = lineas.join("<br>");
   }
 
   function actualizarLectura() {
