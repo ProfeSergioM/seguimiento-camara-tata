@@ -115,19 +115,40 @@ Limitaciones que conviene tener presentes:
 - El método se probó solo con imágenes simuladas: una columna gris café agregada a una foto real, una nube azulada lejos del cráter y un cambio general de luz. La columna se detectó con su tope a 340 m, y la nube y el cambio de luz no generaron detección. Los umbrales deben ajustarse con imágenes reales de emisiones de esta cámara.
 - El fondo se forma al abrir el sitio. Si en ese momento ya hay una emisión, queda incorporada al fondo y no se detecta hasta que cambie. En ese caso conviene usar Reiniciar fondo con el cielo despejado. Una emisión que dura muchos minutos se va incorporando al fondo, aunque diez veces más lento que el resto.
 - Una nube oscura que pase sobre el cráter, o la sombra de una nube, puede activar la señal de oscurecimiento. Una columna de vapor blanca contra cielo azul puede verse más cálida que el fondo. La máscara permite juzgar cada caso.
-- El script de monitoreo todavía no incluye la detección de ceniza.
 - Las medidas de la incandescencia comparten los supuestos de la altura de columna. Además, un píxel equivale a unos 1.85 m en el plano del cráter, así que alto y ancho tienen una resolución de unos 2 m y se muestran redondeados a 5 m. Un punto muy brillante se expande algunos píxeles en el sensor, lo que tiende a sobrestimar alto y ancho. El resplandor reflejado en gases o nubes también puede quedar sobre el umbral y alargar la mancha hacia arriba. Si la mancha toca el borde de la zona de detección, el recuadro lo advierte, porque puede estar recortada.
 
 ## Registro automático desde un computador
 
-`scripts/monitor.py` captura un cuadro cada N minutos, lo guarda, dibuja la escala y calcula el índice de incandescencia. Sirve para dejar un registro continuo sin tener el navegador abierto.
+`scripts/monitor.py` captura un cuadro cada N minutos, lo guarda y le dibuja la escala. Después aplica el mismo detector que el sitio: incandescencia de noche y ceniza de día, según si la imagen viene en blanco y negro u oscura, o en color y luminosa. Sirve para dejar un registro continuo sin tener el navegador abierto.
 
 ```bash
 pip install pillow
-python3 scripts/monitor.py --alias plazatata --intervalo 5 --salida datos
+python3 scripts/monitor.py --alias plazatata --intervalo 1 --salida datos
 ```
 
-Opciones principales: `--umbral-brillo` fija la luminancia desde la cual un píxel cuenta como brillante, `--modo hls` usa ffmpeg para tomar el cuadro del stream, `--snapshot-url` y `--hls-url` aceptan URLs directas, `--una-vez` captura una sola vez y `--calib X Y0 PX100` y `--roi X Y W H` sobrescriben la calibración. La salida queda en `datos/cuadros` (cuadros crudos), `datos/cuadros_escala` (con escala e índice) y `datos/registro.csv`.
+Salidas en la carpeta indicada:
+
+- `cuadros/`: cuadros crudos.
+- `cuadros_escala/`: cuadros con la escala, la zona del detector activo, la caja de la mancha o la columna y una línea de texto con el resultado.
+- `mascaras/`: máscara de detección de cada captura, solo con `--mascaras`.
+- `registro.csv`: una fila por captura con el detector usado, los dos índices, los píxeles de cada clase y el tope, alto y ancho de la mancha o la columna. Si existe un `registro.csv` de una versión anterior del script, con otras columnas, se renombra y se empieza uno nuevo.
+- `fondo_ceniza.bin` y `fondo_ceniza.json`: el fondo de la detección de ceniza. Se guarda en cada captura, así que sobrevive a un reinicio. Si pasaron más de tres constantes de tiempo desde la última captura de día, por ejemplo después de la noche, se forma uno nuevo.
+
+Para la ceniza conviene un intervalo de 1 a 2 minutos. El fondo tiene una constante de tiempo de 10 minutos; con capturas cada 5 minutos o más, el fondo se parece mucho a la captura anterior y la detección responde solo a cambios entre capturas.
+
+Opciones principales:
+
+| Opción | Uso |
+|---|---|
+| `--detector auto/ceniza/incand` | Elige el detector; `auto` decide según la imagen |
+| `--umbral`, `--umbral-brillo` | Alerta y brillo de la incandescencia |
+| `--umbral-ceniza`, `--umbral-calidez`, `--umbral-oscuro` | Alerta y criterios de la ceniza |
+| `--tau-fondo` | Constante de tiempo del fondo de ceniza, en segundos |
+| `--calib X Y0 PX100`, `--roi X Y W H`, `--zona X Y W H` | Calibración, ROI del cráter y zona de columna |
+| `--modo hls`, `--snapshot-url`, `--hls-url` | Fuente de imagen; el modo HLS usa ffmpeg |
+| `--mascaras`, `--una-vez` | Guardar máscaras; capturar una sola vez |
+
+En un computador común, cada captura toma menos de un segundo de cálculo.
 
 ## Notas técnicas
 

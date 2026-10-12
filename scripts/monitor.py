@@ -2,20 +2,32 @@
 """Registro automático de la cámara Plaza Tata (Nevados de Chillán).
 
 Cada N minutos captura un cuadro de la cámara (snapshot JPG de IPCamLive o
-un cuadro del stream HLS con ffmpeg), lo guarda, le dibuja la escala de
-altura calibrada y calcula un índice de incandescencia en la región del
-cráter. Los resultados se acumulan en un CSV.
+un cuadro del stream HLS con ffmpeg), lo guarda y le dibuja la escala de
+altura calibrada. Luego aplica el detector que corresponde a la imagen:
+
+  - De noche (imagen en blanco y negro u oscura): índice de incandescencia
+    en la ROI del cráter y medidas de la mancha principal.
+  - De día (imagen en color y luminosa): índice de ceniza en la zona de
+    columna, comparando cada píxel con su propio fondo, y medidas de la
+    columna que nace en el cráter.
+
+Es el mismo método que usa el sitio. El fondo de la detección de ceniza se
+guarda en la carpeta de salida, así que sobrevive a un reinicio del
+script. Los resultados se acumulan en un CSV.
 
 Requisitos: Python 3.8+, Pillow (pip install pillow). Para el modo HLS se
 necesita ffmpeg en el PATH.
 
 Ejemplos:
-    python3 scripts/monitor.py --alias XXXXXXXX --intervalo 5
-    python3 scripts/monitor.py --alias XXXXXXXX --modo hls --intervalo 2 --salida datos
+    python3 scripts/monitor.py --alias plazatata --intervalo 5
+    python3 scripts/monitor.py --alias plazatata --intervalo 1 --mascaras
+    python3 scripts/monitor.py --alias plazatata --modo hls --intervalo 2 --salida datos
     python3 scripts/monitor.py --snapshot-url https://.../snapshot.jpg --una-vez
 """
 import argparse
+import array
 import csv
+import math
 import datetime as dt
 import json
 import pathlib
@@ -39,7 +51,14 @@ except Exception:  # pragma: no cover
 REF_W = 1920
 CALIB = {"x": 868.5, "y0": 565.6, "px_por_100m": 54.1, "altura_max": 500}
 ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
+ZONA_COLUMNA = {"x": 568, "y": 241, "w": 600, "h": 335}
 UMBRAL_BRILLO = 200
+ANCHO_CENIZA = 300          # ancho de la zona de columna reducida, en píxeles
+COLOR_MIN_DIA, LUM_MIN_DIA = 4.0, 45.0
+COLORES = {
+    "incand": {1: (255, 212, 0), 2: (0, 229, 255)},     # rojizo, brillante
+    "ceniza": {1: (214, 140, 60), 2: (179, 136, 255)},  # más cálido, más oscuro
+}
 UA = "Mozilla/5.0 (seguimiento-camara-tata)"
 
 
@@ -92,11 +111,13 @@ def fuente(tam):
     return ImageFont.load_default()
 
 
-def mancha_mayor(mascara, w, h, minimo=6):
+def mancha_mayor(mascara, w, h, minimo=6, caja=None):
     """Mancha conectada más grande (vecindad de 8) en una máscara plana.
 
-    Devuelve (n, top, bot, izq, der) en píxeles de la ROI, o None si la
-    mancha más grande tiene menos de `minimo` píxeles.
+    Devuelve (n, top, bot, izq, der) en píxeles de la máscara, o None si la
+    mancha más grande tiene menos de `minimo` píxeles. Si se indica una
+    caja (x0, y0, x1, y1), solo cuentan las manchas que la tocan: una
+    columna de ceniza debe nacer en el cráter.
     """
     visto = bytearray(len(mascara))
     mejor = None
@@ -106,11 +127,14 @@ def mancha_mayor(mascara, w, h, minimo=6):
         pila = [p0]
         visto[p0] = 1
         n, top, bot, izq, der = 0, h, -1, w, -1
+        toca = caja is None
         while pila:
             p = pila.pop()
             y, x = divmod(p, w)
             n += 1
             top, bot, izq, der = min(top, y), max(bot, y), min(izq, x), max(der, x)
+            if not toca and caja[0] <= x <= caja[2] and caja[1] <= y <= caja[3]:
+                toca = True
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
                     xx, yy = x + dx, y + dy
@@ -119,66 +143,249 @@ def mancha_mayor(mascara, w, h, minimo=6):
                         if mascara[q] and not visto[q]:
                             visto[q] = 1
                             pila.append(q)
-        if mejor is None or n > mejor[0]:
+        if toca and (mejor is None or n > mejor[0]):
             mejor = (n, top, bot, izq, der)
     return mejor if mejor and mejor[0] >= minimo else None
 
 
+def medir_en_metros(m, ox, oy, sx, sy, f, wm, hm):
+    """Convierte una mancha de la máscara a metros con la calibración.
+
+    (ox, oy) es la esquina de la zona en el cuadro y (sx, sy) el tamaño de
+    un píxel de la máscara en píxeles del cuadro. En el plano del cráter un
+    píxel cubre la misma distancia en horizontal y en vertical.
+    """
+    n, top, bot, izq, der = m
+    m_por_px = 100.0 / CALIB["px_por_100m"]
+    top_ref = (oy + top * sy) / f
+    bot_ref = (oy + (bot + 1) * sy) / f
+    izq_ref = (ox + izq * sx) / f
+    der_ref = (ox + (der + 1) * sx) / f
+    return {
+        "px": n, "top_ref": top_ref, "bot_ref": bot_ref, "izq_ref": izq_ref, "der_ref": der_ref,
+        "tope_m": (CALIB["y0"] - top_ref) * m_por_px,
+        "alto_m": (bot_ref - top_ref) * m_por_px,
+        "ancho_m": (der_ref - izq_ref) * m_por_px,
+        "recortada": top == 0 or izq == 0 or bot == hm - 1 or der == wm - 1,
+    }
+
+
+def rgb(img):
+    """Píxeles (R, G, B) de una imagen RGB. Se lee de tobytes() porque
+    getdata() quedará obsoleto en Pillow 14."""
+    b = img.tobytes()
+    return zip(b[0::3], b[1::3], b[2::3])
+
+
+def caracterizar(im):
+    """Luminancia media y colorido del cuadro sobre una copia reducida. El
+    colorido es casi cero cuando la cámara pasa a blanco y negro de noche."""
+    mini = im.resize((160, max(1, int(160 * im.height / im.width))))
+    lum, color, n = 0.0, 0.0, 0
+    for R, G, B in rgb(mini):
+        lum += 0.299 * R + 0.587 * G + 0.114 * B
+        color += (abs(R - G) + abs(G - B) + abs(B - R)) / 3.0
+        n += 1
+    return lum / n, color / n
+
+
+def es_de_dia(lum, color):
+    return color >= COLOR_MIN_DIA and lum >= LUM_MIN_DIA
+
+
 def indice_incandescencia(im, f):
-    """Índice (%% de píxeles rojizos o brillantes en la ROI) y medidas de la
-    mancha principal: tope sobre la cumbre, alto y ancho, en metros."""
+    """Índice (%% de píxeles rojizos o brillantes en la ROI del cráter),
+    luminancia media de la ROI, máscara y medidas de la mancha principal."""
     x, y = int(ROI["x"] * f), int(ROI["y"] * f)
     w, h = int(ROI["w"] * f), int(ROI["h"] * f)
     roi = im.crop((x, y, x + w, y + h)).convert("RGB")
-    px = roi.load()
     mascara = bytearray(roi.width * roi.height)
     calientes, lum = 0, 0.0
+    for p, (R, G, B) in enumerate(rgb(roi)):
+        L = 0.299 * R + 0.587 * G + 0.114 * B
+        lum += L
+        # 1 rojizo (solo en color); 2 brillante (lo que cuenta de noche,
+        # cuando la cámara transmite en blanco y negro).
+        if R >= 140 and R > G * 1.25 and R > B * 1.6:
+            mascara[p] = 1
+        elif L >= UMBRAL_BRILLO:
+            mascara[p] = 2
+        if mascara[p]:
+            calientes += 1
     n = roi.width * roi.height
-    for j in range(roi.height):
-        for i in range(roi.width):
-            R, G, B = px[i, j]
-            L = 0.299 * R + 0.587 * G + 0.114 * B
-            lum += L
-            # Rojizo (solo en color) o brillante (criterio que cuenta de noche,
-            # cuando la cámara transmite en blanco y negro).
-            if (R >= 140 and R > G * 1.25 and R > B * 1.6) or L >= UMBRAL_BRILLO:
-                calientes += 1
-                mascara[j * roi.width + i] = 1
-    gris = im.convert("L").resize((160, max(1, int(160 * im.height / im.width))))
-    lum_cuadro = sum(gris.tobytes()) / (gris.width * gris.height)
-    medidas = None
     m = mancha_mayor(mascara, roi.width, roi.height)
-    if m:
-        _, top, bot, izq, der = m
-        m_por_px = 100.0 / CALIB["px_por_100m"]
-        top_ref = (y + top) / f
-        medidas = {
-            "tope_m": (CALIB["y0"] - top_ref) * m_por_px,
-            "alto_m": (bot + 1 - top) / f * m_por_px,
-            "ancho_m": (der + 1 - izq) / f * m_por_px,
-        }
-    return 100.0 * calientes / n, lum / n, lum_cuadro, medidas
+    medidas = medir_en_metros(m, x, y, 1, 1, f, roi.width, roi.height) if m else None
+    return {"indice": 100.0 * calientes / n, "lum_roi": lum / n, "mascara": mascara, "zona": roi,
+            "w": roi.width, "h": roi.height, "medidas": medidas}
 
 
-def anotar(im, f, texto):
+class FondoCeniza:
+    """Fondo adaptativo de la zona de columna: para cada píxel, un promedio
+    lento de su tono (R − B) y de su luminancia. Se guarda en disco para
+    sobrevivir a un reinicio. Si pasó mucho tiempo desde la última
+    actualización, se vuelve a formar."""
+
+    def __init__(self, carpeta, tau):
+        self.bin = pathlib.Path(carpeta) / "fondo_ceniza.bin"
+        self.meta = pathlib.Path(carpeta) / "fondo_ceniza.json"
+        self.tau = tau
+        self.clave, self.rb, self.l, self.t, self.t0 = None, None, None, 0.0, 0.0
+        try:
+            meta = json.loads(self.meta.read_text(encoding="utf-8"))
+            datos = array.array("f")
+            with open(self.bin, "rb") as fh:
+                datos.fromfile(fh, 2 * meta["n"])
+            self.clave, self.t, self.t0 = meta["clave"], meta["t"], meta["t0"]
+            self.rb, self.l = datos[:meta["n"]], datos[meta["n"]:]
+        except (OSError, ValueError, KeyError, EOFError):
+            pass
+
+    def guardar(self):
+        n = len(self.rb)
+        with open(self.bin, "wb") as fh:
+            (self.rb + self.l).tofile(fh)
+        self.meta.write_text(json.dumps({"clave": self.clave, "t": self.t, "t0": self.t0, "n": n}), encoding="utf-8")
+
+
+def mediana(valores):
+    paso = max(1, len(valores) // 4000)
+    m = sorted(valores[::paso])
+    return m[len(m) // 2]
+
+
+def indice_ceniza(im, f, fondo, umbral_calidez, umbral_oscuro, t_unix):
+    """Índice de ceniza (%% de píxeles de la zona de columna que se volvieron
+    más cálidos o más oscuros que su fondo), máscara y medidas de la
+    columna conectada al cráter.
+
+    A cada diferencia se le resta la mediana de la zona, para que un cambio
+    general de luz o de balance de color no active la detección. Los
+    píxeles detectados actualizan su fondo diez veces más lento, para que
+    una emisión sostenida no se absorba de inmediato.
+    """
+    zx, zy = int(ZONA_COLUMNA["x"] * f), int(ZONA_COLUMNA["y"] * f)
+    zw = min(im.width - zx, int(ZONA_COLUMNA["w"] * f))
+    zh = min(im.height - zy, int(ZONA_COLUMNA["h"] * f))
+    wm = min(ANCHO_CENIZA, zw)
+    hm = max(1, round(zh * wm / zw))
+    zona = im.crop((zx, zy, zx + zw, zy + zh)).resize((wm, hm), Image.BOX)
+    rb = array.array("f")
+    l = array.array("f")
+    for R, G, B in rgb(zona):
+        rb.append(R - B)
+        l.append(0.299 * R + 0.587 * G + 0.114 * B)
+    n = wm * hm
+    clave = f"{zx},{zy},{zw},{zh},{wm},{hm}"
+    res = {"indice": 0.0, "calidos": 0, "oscuros": 0, "mascara": bytearray(n), "zona": zona, "w": wm, "h": hm,
+           "medidas": None, "edad_fondo_s": 0.0, "fondo_nuevo": False}
+    if fondo.clave != clave or fondo.rb is None or t_unix - fondo.t > 3 * fondo.tau:
+        fondo.clave, fondo.rb, fondo.l, fondo.t, fondo.t0 = clave, rb, l, t_unix, t_unix
+        fondo.guardar()
+        res["fondo_nuevo"] = True
+        return res
+    drb = [rb[p] - fondo.rb[p] for p in range(n)]
+    dl = [l[p] - fondo.l[p] for p in range(n)]
+    m_rb, m_l = mediana(drb), mediana(dl)
+    mascara = res["mascara"]
+    calidos = oscuros = 0
+    for p in range(n):
+        L = l[p]
+        if 35 <= L <= 235 and drb[p] - m_rb >= umbral_calidez:
+            mascara[p] = 1
+            calidos += 1
+        elif L >= 15 and dl[p] - m_l <= -umbral_oscuro:
+            mascara[p] = 2
+            oscuros += 1
+    a = 1 - math.exp(-max(0.0, t_unix - fondo.t) / fondo.tau)
+    a2 = a / 10
+    for p in range(n):
+        k = a2 if mascara[p] else a
+        fondo.rb[p] += k * (rb[p] - fondo.rb[p])
+        fondo.l[p] += k * (l[p] - fondo.l[p])
+    fondo.t = t_unix
+    fondo.guardar()
+    # Caja del cráter (la ROI de incandescencia) en píxeles de la máscara.
+    sx, sy = zw / wm, zh / hm
+    caja = ((ROI["x"] * f - zx) / sx, (ROI["y"] * f - zy) / sy,
+            ((ROI["x"] + ROI["w"]) * f - zx) / sx, ((ROI["y"] + ROI["h"]) * f - zy) / sy)
+    m = mancha_mayor(mascara, wm, hm, caja=caja)
+    res.update(indice=100.0 * (calidos + oscuros) / n, calidos=calidos, oscuros=oscuros,
+               edad_fondo_s=t_unix - fondo.t0,
+               medidas=medir_en_metros(m, zx, zy, sx, sy, f, wm, hm) if m else None)
+    return res
+
+
+def imagen_mascara(res, modo, escala):
+    """Máscara en color sobre la zona en gris atenuado, ampliada."""
+    out = Image.new("RGB", (res["w"], res["h"]))
+    col = COLORES[modo]
+    pix = []
+    for c, (R, G, B) in zip(res["mascara"], rgb(res["zona"])):
+        if c:
+            pix.append(col[c])
+        else:
+            g = int(0.4 * (0.299 * R + 0.587 * G + 0.114 * B))
+            pix.append((g, g, g))
+    out.putdata(pix)
+    return out.resize((res["w"] * escala, res["h"] * escala), Image.NEAREST)
+
+
+def anotar(im, f, texto, modo, medidas):
     d = ImageDraw.Draw(im)
     fn = fuente(max(12, int(16 * f)))
+    fn_chica = fuente(max(11, int(13 * f)))
     x = CALIB["x"] * f
     y_de = lambda h: (CALIB["y0"] - h / 100.0 * CALIB["px_por_100m"]) * f
     y0, ytop = y_de(0), y_de(CALIB["altura_max"])
-    d.line([(x, y0), (x, ytop)], fill=(0, 0, 0), width=max(3, int(5 * f)))
-    d.line([(x, y0), (x, ytop)], fill=(255, 255, 255), width=max(1, int(2 * f)))
+    d.line([(x, y0), (x, ytop)], fill=(0, 0, 0), width=max(2, int(3 * f)))
+    d.line([(x, y0), (x, ytop)], fill=(235, 235, 235), width=max(1, int(1.2 * f)))
     h = 0
     while h <= CALIB["altura_max"]:
         y = y_de(h)
-        d.line([(x - 12 * f, y), (x + 12 * f, y)], fill=(255, 255, 255), width=max(1, int(2 * f)))
-        d.text((x + 18 * f, y), str(h), fill=(255, 255, 255), font=fn, anchor="lm",
+        d.line([(x - 7 * f, y), (x + 7 * f, y)], fill=(235, 235, 235), width=max(1, int(1.2 * f)))
+        d.text((x + 11 * f, y), str(h), fill=(235, 235, 235), font=fn_chica, anchor="lm",
                stroke_width=max(1, int(2 * f)), stroke_fill=(0, 0, 0))
         h += 100
-    d.rectangle([ROI["x"] * f, ROI["y"] * f, (ROI["x"] + ROI["w"]) * f, (ROI["y"] + ROI["h"]) * f], outline=(229, 83, 61), width=1)
+    if modo == "ceniza":
+        z = ZONA_COLUMNA
+        d.rectangle([z["x"] * f, z["y"] * f, (z["x"] + z["w"]) * f, (z["y"] + z["h"]) * f], outline=(232, 170, 90), width=1)
+    else:
+        d.rectangle([ROI["x"] * f, ROI["y"] * f, (ROI["x"] + ROI["w"]) * f, (ROI["y"] + ROI["h"]) * f], outline=(229, 83, 61), width=1)
+    if medidas:
+        color = (232, 170, 90) if modo == "ceniza" else (0, 229, 255)
+        caja = [medidas["izq_ref"] * f, medidas["top_ref"] * f, medidas["der_ref"] * f, medidas["bot_ref"] * f]
+        d.rectangle(caja, outline=color, width=max(1, int(1.2 * f)))
+        etiqueta = ("columna " if modo == "ceniza" else "tope ") + f"{medidas['tope_m']:.0f} m"
+        d.text((caja[2] + 8 * f, caja[1]), etiqueta, fill=color, font=fn_chica, anchor="lm",
+               stroke_width=max(1, int(2 * f)), stroke_fill=(0, 0, 0))
     d.text((12 * f, im.height - 16 * f), texto, fill=(255, 255, 255), font=fn, anchor="lm",
            stroke_width=max(1, int(2 * f)), stroke_fill=(0, 0, 0))
     return im
+
+
+CABECERA = ["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "colorido", "detector",
+            "indice_incand_pct", "lum_roi", "incandescencia", "tope_incand_m", "alto_incand_m", "ancho_incand_m",
+            "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "posible_emision", "edad_fondo_min",
+            "tope_columna_m", "alto_columna_m", "ancho_columna_m"]
+
+
+def preparar_csv(ruta):
+    """Si el CSV existe con otras columnas (versión anterior del script), lo
+    renombra y empieza uno nuevo, para no mezclar formatos."""
+    if ruta.exists():
+        with open(ruta, encoding="utf-8") as fh:
+            primera = fh.readline().strip()
+        if primera != ";".join(CABECERA):
+            anterior = ruta.with_name(ruta.stem + "_anterior_" + ahora().strftime("%Y%m%d_%H%M%S") + ".csv")
+            ruta.rename(anterior)
+            print(f"CSV con otro formato renombrado a {anterior.name}", flush=True)
+    if not ruta.exists():
+        with open(ruta, "w", newline="", encoding="utf-8") as fh:
+            csv.writer(fh, delimiter=";").writerow(CABECERA)
+
+
+def fmt(v, dec=0):
+    return "" if v is None else f"{v:.{dec}f}"
 
 
 def main():
@@ -191,6 +398,14 @@ def main():
     ap.add_argument("--salida", default="datos", help="carpeta de salida")
     ap.add_argument("--umbral", type=float, default=2.0, help="umbral del índice (%%) para marcar incandescencia")
     ap.add_argument("--umbral-brillo", type=float, default=200, help="luminancia (0 a 255) desde la cual un píxel cuenta como brillante")
+    ap.add_argument("--detector", choices=["auto", "ceniza", "incand"], default="auto",
+                    help="auto: ceniza de día e incandescencia de noche, según la imagen")
+    ap.add_argument("--umbral-ceniza", type=float, default=1.0, help="índice de ceniza (%%) para marcar posible emisión")
+    ap.add_argument("--umbral-calidez", type=float, default=12, help="aumento mínimo de R − B de un píxel sobre su fondo")
+    ap.add_argument("--umbral-oscuro", type=float, default=25, help="baja mínima de luminancia de un píxel bajo su fondo")
+    ap.add_argument("--tau-fondo", type=float, default=600, help="constante de tiempo del fondo de ceniza, en segundos")
+    ap.add_argument("--zona", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="sobrescribe la zona de columna para ceniza")
+    ap.add_argument("--mascaras", action="store_true", help="guarda la máscara de detección de cada captura")
     ap.add_argument("--calib", nargs=3, type=float, metavar=("X", "Y0", "PX100"), help="sobrescribe x, y0, px por 100 m")
     ap.add_argument("--roi", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="sobrescribe la ROI")
     ap.add_argument("--una-vez", action="store_true", help="captura una sola vez y termina")
@@ -202,14 +417,19 @@ def main():
         CALIB.update(x=a.calib[0], y0=a.calib[1], px_por_100m=a.calib[2])
     if a.roi:
         ROI.update(x=a.roi[0], y=a.roi[1], w=a.roi[2], h=a.roi[3])
+    if a.zona:
+        ZONA_COLUMNA.update(x=a.zona[0], y=a.zona[1], w=a.zona[2], h=a.zona[3])
     if not (a.alias or a.snapshot_url or a.hls_url):
         ap.error("indique --alias, --snapshot-url o --hls-url")
 
     salida = pathlib.Path(a.salida)
     (salida / "cuadros").mkdir(parents=True, exist_ok=True)
     (salida / "cuadros_escala").mkdir(parents=True, exist_ok=True)
+    if a.mascaras:
+        (salida / "mascaras").mkdir(parents=True, exist_ok=True)
     csv_path = salida / "registro.csv"
-    nuevo = not csv_path.exists()
+    preparar_csv(csv_path)
+    fondo = FondoCeniza(salida, a.tau_fondo)
 
     url = None
     if a.modo == "hls":
@@ -228,24 +448,40 @@ def main():
                 descargar(url, crudo)
             im = Image.open(crudo).convert("RGB")
             f = im.width / REF_W
-            idx, lum_roi, lum_cuadro, med = indice_incandescencia(im, f)
-            noche = lum_cuadro < 40
-            marca = "INCANDESCENCIA" if idx >= a.umbral else ""
-            texto = f"Cámara Tata · {t.strftime('%Y-%m-%d %H:%M:%S')} · índice {idx:.2f} % {marca}"
-            if med:
-                texto += f" · tope {med['tope_m']:.0f} m · alto {med['alto_m']:.0f} m · ancho {med['ancho_m']:.0f} m"
-            anotar(im, f, texto).save(salida / "cuadros_escala" / f"{nombre}.jpg", quality=90)
+            lum_cuadro, colorido = caracterizar(im)
+            dia = es_de_dia(lum_cuadro, colorido)
+            modo = a.detector if a.detector != "auto" else ("ceniza" if dia else "incand")
+            inc = indice_incandescencia(im, f)
+            cen = indice_ceniza(im, f, fondo, a.umbral_calidez, a.umbral_oscuro, time.time()) if (modo == "ceniza" or dia) else None
+            mi, mc = inc["medidas"], cen["medidas"] if cen else None
+            alerta_inc = inc["indice"] >= a.umbral
+            alerta_cen = bool(cen) and cen["indice"] >= a.umbral_ceniza
+            if modo == "ceniza":
+                texto = f"Cámara Tata · {t.strftime('%Y-%m-%d %H:%M:%S')} · ceniza {cen['indice']:.2f} %"
+                texto += " POSIBLE EMISIÓN" if alerta_cen else ""
+                if mc:
+                    texto += f" · columna: tope {mc['tope_m']:.0f} m · alto {mc['alto_m']:.0f} m · ancho {mc['ancho_m']:.0f} m"
+                if cen["fondo_nuevo"]:
+                    texto += " · fondo nuevo"
+            else:
+                texto = f"Cámara Tata · {t.strftime('%Y-%m-%d %H:%M:%S')} · incandescencia {inc['indice']:.2f} %"
+                texto += " INCANDESCENCIA" if alerta_inc else ""
+                if mi:
+                    texto += f" · tope {mi['tope_m']:.0f} m · alto {mi['alto_m']:.0f} m · ancho {mi['ancho_m']:.0f} m"
+            anotar(im, f, texto, modo, mc if modo == "ceniza" else mi).save(salida / "cuadros_escala" / f"{nombre}.jpg", quality=90)
+            if a.mascaras:
+                res = cen if modo == "ceniza" else inc
+                imagen_mascara(res, modo, 2 if modo == "ceniza" else 3).save(salida / "mascaras" / f"{nombre}_{modo}.png")
             with open(csv_path, "a", newline="", encoding="utf-8") as fh:
-                w = csv.writer(fh, delimiter=";")
-                if nuevo:
-                    w.writerow(["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_roi", "indice_pct", "noche", "incandescencia",
-                                "tope_incand_m", "alto_incand_m", "ancho_incand_m"])
-                    nuevo = False
-                w.writerow([t.isoformat(timespec="seconds"), crudo.name, im.width, im.height,
-                            f"{lum_cuadro:.1f}", f"{lum_roi:.1f}", f"{idx:.2f}", int(noche), int(idx >= a.umbral)] +
-                           ([f"{med['tope_m']:.0f}", f"{med['alto_m']:.0f}", f"{med['ancho_m']:.0f}"] if med else ["", "", ""]))
-            extra = f" tope={med['tope_m']:.0f}m alto={med['alto_m']:.0f}m ancho={med['ancho_m']:.0f}m" if med else ""
-            print(f"{t:%H:%M:%S} {im.width}x{im.height} lum={lum_cuadro:.0f} índice={idx:.2f}%{extra} {marca}", flush=True)
+                csv.writer(fh, delimiter=";").writerow([
+                    t.isoformat(timespec="seconds"), crudo.name, im.width, im.height, fmt(lum_cuadro, 1), fmt(colorido, 1),
+                    "dia" if modo == "ceniza" else "noche",
+                    fmt(inc["indice"], 2), fmt(inc["lum_roi"], 1), int(alerta_inc),
+                    fmt(mi and mi["tope_m"]), fmt(mi and mi["alto_m"]), fmt(mi and mi["ancho_m"]),
+                    fmt(cen and cen["indice"], 2), "" if not cen else cen["calidos"], "" if not cen else cen["oscuros"],
+                    "" if not cen else int(alerta_cen), fmt(cen and cen["edad_fondo_s"] / 60, 1),
+                    fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"])])
+            print(f"{t:%H:%M:%S} {im.width}x{im.height} lum={lum_cuadro:.0f} color={colorido:.1f} → {texto.split(' · ', 2)[-1]}", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{t:%H:%M:%S} error: {e}", file=sys.stderr, flush=True)
         if a.una_vez:
