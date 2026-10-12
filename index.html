@@ -74,9 +74,14 @@
       <p class="inserto-info" id="roi-mancha"></p>
       <button class="boton chico" id="btn-usar-tope" disabled title="Poner el marcador de altura en el tope de la incandescencia">Medir tope</button>
     </div>
+    <p class="inserto-info pn-info" id="pn-info" hidden></p>
     <div class="inserto-graf">
       <div class="inserto-graf-cab">
         <span id="graf-titulo">Índice en el tiempo (%)</span>
+        <div class="grupo segmentado mini" role="group" aria-label="Variable del gráfico">
+          <button class="boton chico" data-graf="indice" title="Graficar el índice">Índice</button>
+          <button class="boton chico" data-graf="altura" title="Graficar la altura del tope">Altura</button>
+        </div>
         <label class="fila chica"><input id="n-muestreo-ins" type="checkbox"> registrar</label>
       </div>
       <canvas id="grafico" class="grafico" aria-label="Índice de incandescencia en el tiempo"></canvas>
@@ -171,6 +176,29 @@
       </div>
     </details>
 
+    <details class="panel" id="panel-pn">
+      <summary>VIGIA-PlumeNet</summary>
+      <div class="campos">
+        <p class="nota" id="pn-estado">Modelo no cargado.</p>
+        <div class="acciones">
+          <button class="boton primario" id="pn-cargar-sitio" title="Descarga el modelo publicado junto al sitio (89 MB, una sola vez)">Cargar modelo del sitio</button>
+          <label class="boton" for="pn-archivo" title="Modelo .onnx guardado en este PC">Cargar archivo .onnx</label>
+          <input id="pn-archivo" type="file" accept=".onnx" hidden>
+          <button class="boton peligro" id="pn-olvidar">Olvidar modelo</button>
+        </div>
+        <label class="fila"><input id="pn-auto" type="checkbox"> Analizar automáticamente</label>
+        <label>Intervalo entre análisis (s) <input id="pn-int" type="number" min="5" step="5"></label>
+        <label class="fila"><input id="pn-solo-dia" type="checkbox"> Solo de día</label>
+        <label class="fila"><input id="pn-mascara" type="checkbox"> Mostrar la máscara del modelo sobre la imagen</label>
+        <label>Umbral de alerta de ceniza (% del recorte) <input id="pn-umbral" type="number" min="0" step="0.5"></label>
+        <label>Recorte x, y, ancho, alto (px ref) <input id="pn-recorte" placeholder="760, 0, 1160, 653"></label>
+        <div class="acciones">
+          <button class="boton" id="pn-ahora">Analizar ahora</button>
+        </div>
+        <p class="nota">VIGIA-PlumeNet (Giffard-Roisin y colegas, Volcanica, 2026) segmenta la imagen en columna eruptiva, ceniza, gas, terreno, lava y fondo. Pesos CC0, convertidos a ONNX sin cambios. Corre en este PC: con WebGPU tarda alrededor de un segundo; sin WebGPU, varios segundos. Colores de la máscara: naranjo columna eruptiva, café ceniza, celeste gas, rojo lava.</p>
+      </div>
+    </details>
+
     <details class="panel" open>
       <summary>Registro de observaciones</summary>
       <div class="campos">
@@ -190,7 +218,7 @@
         </div>
         <div class="tabla-env">
           <table id="tabla">
-            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Incand. (%)</th><th>Tope inc. (m)</th><th>Alto inc. (m)</th><th>Ancho inc. (m)</th><th>Ceniza (%)</th><th>Nota</th><th></th></tr></thead>
+            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Incand. (%)</th><th>Tope inc. (m)</th><th>Alto inc. (m)</th><th>Ancho inc. (m)</th><th>Ceniza (%)</th><th>PlumeNet ceniza (%)</th><th>Nota</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>

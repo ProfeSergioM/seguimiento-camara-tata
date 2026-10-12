@@ -70,6 +70,7 @@ Detalle de cada modo:
 - **Calibrar**: aparecen tres manijas. El punto celeste (0 m) se arrastra hasta la cumbre, el punto verde (500 m) fija la escala y el rectángulo rojo es la región de interés para incandescencia. También se pueden escribir los valores en el panel Calibración.
 - **Detección**: muestra u oculta el recuadro de la región de interés, también con la tecla Z. La máscara permite ver qué píxeles cuentan para el índice y ajustar el umbral de brillo. Debajo, un gráfico muestra el índice de las últimas 6 horas con el umbral de alerta; al pasar el mouse se lee la hora local, la hora UTC y el valor de cada muestra. La casilla «registrar» activa el muestreo automático.
 - **Tope, alto y ancho de la incandescencia**: el recuadro de detección toma la mancha conectada más grande de la máscara, de al menos 6 píxeles, y la convierte a metros con la calibración. Informa a qué altura sobre la cumbre llega su borde superior y cuánto mide de alto y de ancho. Sobre la imagen se dibuja en cian la caja de la mancha y una cota con el tope. El botón «Medir tope» lleva el marcador de altura a ese borde y deja el tipo de registro en incandescencia, para ajustarlo si hace falta y registrarlo. El registro y las muestras guardan las tres medidas.
+- **Gráfico del recuadro**: el selector Índice, Altura cambia entre el índice del detector activo, en %, y el tope de la columna o de la mancha incandescente, en metros sobre el cráter.
 - **Detección de ceniza (de día)**: el recuadro cambia solo entre ceniza e incandescencia según la luminosidad del cielo, medida en el 40 % superior del cuadro. No se decide por el color, porque la cámara tarda en pasar de blanco y negro a color al amanecer y al revés al atardecer. Pasa a día sobre 78 y vuelve a noche bajo 62, en una escala de 0 a 255. En las imágenes disponibles el cielo da entre 109 y 141 de día, también en blanco y negro, y cerca de 40 de noche. El selector Auto, Ceniza, Incandescencia del recuadro permite fijar el detector. El método se explica más abajo.
 - **Silueta**: muestra u oculta la silueta del volcán como referencia visual, también con la tecla S. Se traza desde la imagen actual con el botón «Trazar silueta» del panel Calibración, idealmente con cielo despejado y sin emisión: por cada columna se baja desde el cielo y se marca el primer punto que se aparta de forma sostenida de su color. En una imagen de prueba despejada el error mediano fue de 1.5 px, unos 3 m. Con cielo nublado el trazo sigue los bordes de las nubes. La silueta queda guardada en el navegador; «Copiar» entrega el texto para dejarla fija en `config.js`. No interviene en las mediciones. La configuración trae una silueta trazada en vivo el 12-10-2026 a las 07:04, con cielo despejado, con un falso borde por neblina corregido a mano entre x = 1172 y 1188.
 - **Marco**: muestra u oculta el borde de la región de interés sobre la imagen, también con la tecla R. En modo Calibrar el marco se ve siempre.
@@ -160,9 +161,21 @@ Opciones principales:
 
 En un computador común, cada captura toma menos de un segundo de cálculo.
 
-## VIGIA-PlumeNet (opcional)
+## VIGIA-PlumeNet en el sitio
 
-[VIGIA-PlumeNet](https://gricad-gitlab.univ-grenoble-alpes.fr/giffards/vigia-plumenet) (Giffard-Roisin y colegas, Volcanica, 2026) es un modelo basado en DINOv2 que segmenta imágenes RGB de cámaras de volcanes en seis clases: fondo, columna eruptiva, terreno, emisión de ceniza, emisión sin ceniza y lava. Este repositorio no incluye el modelo ni su código; `scripts/plumenet.py` carga el modelo *traced* que cada usuario descarga desde [Hugging Face](https://huggingface.co/SophieGif/VIGIA-PlumeNet) y aplica el mismo preprocesamiento que el script de evaluación original. También hay un [demo en línea](https://mounts-observatory.org/vigianet/).
+El sitio puede ejecutar VIGIA-PlumeNet en el navegador del PC donde está abierto. El modelo, convertido a ONNX sin cambios en los pesos, está en `modelos/` (ver `modelos/LEEME.md`), y corre en un proceso aparte con [ONNX Runtime Web](https://onnxruntime.ai/) 1.20.1, que se descarga desde jsDelivr. Usa WebGPU si el navegador lo tiene; si no, WebAssembly.
+
+1. Abra el panel ☰ y la sección VIGIA-PlumeNet.
+2. Pulse «Cargar modelo del sitio» para descargarlo, 89 MB, una sola vez. En el `tata.html` local, que no puede descargarlo, use «Cargar archivo .onnx» con una copia de `modelos/vigia_plumenet_fp32.onnx`. El modelo queda guardado en el navegador y se inicia solo al abrir el sitio.
+3. Marque «Analizar automáticamente». Por defecto analiza cada 30 s, solo de día, el recorte del cielo sobre el volcán.
+
+El recuadro de detección muestra el porcentaje de ceniza y de gas, y el tope de la columna que toca el cráter, como cota mínima si sale del recorte. Sobre la imagen se superpone la máscara del modelo: naranjo columna eruptiva, café ceniza, celeste gas y rojo lava. Las muestras, el registro y los CSV incluyen estos resultados en columnas `pn_`.
+
+En un navegador sin tarjeta gráfica, un análisis tomó 8.8 s con WebAssembly. Sobre la emisión real del 12-10-2026 dio 26.6 % de ceniza, frente a 27.3 % del mismo modelo en Python; la diferencia viene de cómo cada uno reduce la imagen a 518 × 518 px.
+
+## VIGIA-PlumeNet en Python (opcional)
+
+[VIGIA-PlumeNet](https://gricad-gitlab.univ-grenoble-alpes.fr/giffards/vigia-plumenet) (Giffard-Roisin y colegas, Volcanica, 2026) es un modelo basado en DINOv2 que segmenta imágenes RGB de cámaras de volcanes en seis clases: fondo, columna eruptiva, terreno, emisión de ceniza, emisión sin ceniza y lava. `scripts/plumenet.py` no incluye código del repositorio original; carga el modelo *traced* que cada usuario descarga desde [Hugging Face](https://huggingface.co/SophieGif/VIGIA-PlumeNet) y aplica el mismo preprocesamiento que el script de evaluación original. También hay un [demo en línea](https://mounts-observatory.org/vigianet/).
 
 ```bash
 pip install torch numpy pillow
@@ -180,6 +193,7 @@ Estado de las pruebas con el modelo real, sobre CPU, de 4 a 9 s por imagen:
 - Con las imágenes de ejemplo del repositorio original, la integración reproduce lo esperado. Por ejemplo, en Stromboli marca la columna de ceniza como columna eruptiva y las desgasificaciones blancas como gas.
 - Con un cuadro diurno de esta cámara sin emisión, el recorte alrededor del volcán no marcó emisiones. El cuadro completo marcó como gas un 2.6 % de nubes altas.
 - Una columna simulada, una franja café translúcida agregada a una foto real, no fue detectada. Esa simulación no tiene la textura de una columna real, así que la prueba no es concluyente.
+- Con una secuencia real grabada del 12-10-2026, una foto cada 20 s desde las 07:04, el detector por color del sitio marcó el inicio de la emisión a las 07:13:42, con 7.6 % de índice y tope de 235 m, y la siguió hasta 28 % y 970 m a las 07:15:50, cuando la columna llegó al borde superior de la imagen. Entre 07:07 y 07:13 marcó entre 1.3 y 3.3 %, con «columnas» de 55 a 105 m. Coinciden con nubes bajas sobre la cumbre teñidas de rosado por el amanecer, aunque también podrían ser gas residual. Con el umbral de alerta por defecto, de 1 %, esa etapa ya activa la alerta; un umbral de 5 % la habría separado de la emisión en esta secuencia.
 - Con una emisión real de esta cámara, del amanecer del 12-10-2026, el resultado dependió del encuadre. El cuadro completo dio 1.4 % de ceniza y 9.6 % de gas, con la columna partida entre ambas clases. El recorte amplio por defecto, de x 760 a 1920 y de y 0 a 653, marcó la columna completa como ceniza: 27 % del recorte y nada de gas.
 - En esa emisión la columna nace cerca de x = 1000 a 1070 e y = 525, fuera de la ROI del cráter por defecto, así que no se midió su tope hasta mover la ROI. La columna sale por el borde superior del recorte; en ese caso el script informa el tope como cota mínima («sale del recorte»), y lo marca en las columnas `pn_*_sale_del_recorte` del CSV.
 

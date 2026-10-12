@@ -68,6 +68,18 @@ window.CAM_CONFIG = {
   umbralCalidez: 12,
   umbralOscuro: 25,
 
+  // VIGIA-PlumeNet en el navegador (ver README). url: modelo ONNX publicado
+  // junto al sitio; ortBase: ONNX Runtime Web; recorte: zona analizada, en
+  // px de referencia; intervalo: segundos entre análisis; umbral: % de
+  // ceniza en el recorte para marcar posible emisión.
+  plumenet: {
+    url: "modelos/vigia_plumenet_fp32.onnx",
+    ortBase: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/",
+    recorte: { x: 760, y: 0, w: 1160, h: 653 },
+    intervalo: 30,
+    umbral: 2
+  },
+
   // Segundos entre muestras de los índices.
   intervaloMuestreo: 10,
 

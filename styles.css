@@ -63,7 +63,10 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .inserto-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
 .inserto-vistas { display: flex; gap: 8px; align-items: flex-start; }
 .segmentado.mini { margin-left: auto; margin-right: 6px; }
-.segmentado.mini .boton.chico { margin-top: 0; }
+.segmentado.mini .pn-info strong { color: rgb(214, 160, 70); }
+.pn-info.alerta strong { color: var(--peligro); }
+label.boton { display: inline-flex; align-items: center; color: var(--texto); font-size: 0.92rem; }
+.boton.chico { margin-top: 0; }
 .subtitulo { margin: 6px 0 0; font-size: 0.85rem; color: var(--texto); }
 .inserto-info, .inserto-graf { width: calc(2 * clamp(140px, 13vw, 300px) + 12px); max-width: 100%; }
 .inserto figure { margin: 0; }

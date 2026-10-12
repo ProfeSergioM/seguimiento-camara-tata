@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 h";
+  const VERSION = "2026-10-12 l";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -362,7 +362,9 @@
       topeM: alturaDesdeY(topRef), baseM: alturaDesdeY(botRef),
       altoM: (botRef - topRef) * mPorPx, anchoM: (derRef - izqRef) * mPorPx,
       // La mancha toca el borde de la zona analizada: puede estar recortada.
-      recortada: m.top === 0 || m.izq === 0 || m.bot === hm - 1 || m.der === wm - 1
+      recortada: m.top === 0 || m.izq === 0 || m.bot === hm - 1 || m.der === wm - 1,
+      // Solo si toca el borde superior el tope real puede estar más arriba.
+      corteArriba: m.top === 0
     };
   }
 
@@ -646,7 +648,10 @@
     $("ley-2").textContent = modo === "ceniza" ? "más oscuro" : "brillante";
     $("ley-1-m").style.background = "rgb(" + COLORES[modo][1].join(",") + ")";
     $("ley-2-m").style.background = "rgb(" + COLORES[modo][2].join(",") + ")";
-    $("graf-titulo").textContent = (modo === "ceniza" ? "Índice de ceniza" : "Índice de incandescencia") + " en el tiempo (%)";
+    $("graf-titulo").textContent = estado.ajustes.grafVar === "altura"
+      ? (modo === "ceniza" ? "Tope de la columna (m)" : "Tope de la incandescencia (m)")
+      : (modo === "ceniza" ? "Índice de ceniza (%)" : "Índice de incandescencia (%)");
+    document.querySelectorAll("[data-graf]").forEach(b => b.classList.toggle("activo", b.dataset.graf === (estado.ajustes.grafVar || "indice")));
     if (estado.modoGraf !== modo) { estado.modoGraf = modo; dibujarGrafico(); }
     const caja = $("inserto");
     const zoom = $("roi-zoom"), mascara = $("roi-mascara"), info = $("roi-info");
@@ -717,6 +722,13 @@
       mancha: ai.mancha, ceniza: estado.anCen, modo: estado.modoDet };
   }
 
+  // Último resultado de PlumeNet, si es reciente (menos de dos intervalos).
+  function pnParaMuestra() {
+    const p = estado.pn;
+    if (!p || Date.now() - p.t > 2 * 1000 * Math.max(5, estado.ajustes.pnIntervalo || 30)) return {};
+    return { pnCen: +p.ceniza.toFixed(2), pnGas: +p.gas.toFixed(2), pnTope: p.colCeniza ? Math.round(p.colCeniza.topeM) : null,
+      pnSale: p.colCeniza ? (p.colCeniza.corteArriba ? 1 : 0) : null, pnTopeGas: p.colGas ? Math.round(p.colGas.topeM) : null };
+  }
   function muestrear() {
     const m = calcularIndice();
     if (!m) { indiceEl.innerHTML = "Índice: <strong>no disponible</strong>"; return; }
@@ -727,7 +739,8 @@
       topeInc: m.mancha ? Math.round(m.mancha.topeM) : null, altoInc: m.mancha ? Math.round(m.mancha.altoM) : null,
       anchoInc: m.mancha ? Math.round(m.mancha.anchoM) : null,
       indCen: c ? +c.indice.toFixed(2) : null, calidos: c ? c.calidos : null, oscuros: c ? c.oscuros : null,
-      topeCol: mc ? Math.round(mc.topeM) : null, altoCol: mc ? Math.round(mc.altoM) : null, anchoCol: mc ? Math.round(mc.anchoM) : null });
+      topeCol: mc ? Math.round(mc.topeM) : null, altoCol: mc ? Math.round(mc.altoM) : null, anchoCol: mc ? Math.round(mc.anchoM) : null,
+      ...pnParaMuestra() });
     if (estado.muestras.length > 5000) estado.muestras.splice(0, estado.muestras.length - 5000);
     guardar(LS.muestras, estado.muestras);
     const alerta = m.indice >= estado.ajustes.umbral;
@@ -766,30 +779,37 @@
     ctx.font = "11px system-ui, sans-serif";
     const ahora = Date.now();
     const ceniza = estado.modoDet === "ceniza";
-    const valor = (s) => ceniza ? s.indCen : s.indice;
+    // Variable graficada: índice (%) o altura del tope (m) de la columna o
+    // de la mancha incandescente, según el detector activo.
+    const altura = estado.ajustes.grafVar === "altura";
+    const valor = altura ? (s) => (ceniza ? s.topeCol : s.topeInc) : (s) => (ceniza ? s.indCen : s.indice);
+    const unidad = altura ? " m" : " %";
     const ms = estado.muestras.filter(s => ahora - new Date(s.t).getTime() <= VENTANA_GRAF_MS && valor(s) != null);
-    const umbral = ceniza ? estado.ajustes.umbralCeniza : estado.ajustes.umbral;
+    const umbral = altura ? null : (ceniza ? estado.ajustes.umbralCeniza : estado.ajustes.umbral);
     if (!ms.length) {
       puntosGraf = [];
       ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(estado.ajustes.muestreo ? "Esperando la primera muestra..." : "Marque «registrar» para graficar el índice", Wc / 2, Hc / 2);
+      ctx.fillText(!estado.ajustes.muestreo ? "Marque «registrar» para graficar" : altura ? "Sin alturas medidas en las últimas 6 h" : "Esperando la primera muestra...", Wc / 2, Hc / 2);
       ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       return;
     }
-    const max = Math.max(1, umbral * 1.5, ...ms.map(valor)) * 1.08;
+    const max = altura ? Math.max(100, ...ms.map(valor)) * 1.08 : Math.max(1, umbral * 1.5, ...ms.map(valor)) * 1.08;
+    const min = altura ? Math.min(0, ...ms.map(valor)) : 0;
     const t0 = new Date(ms[0].t).getTime(), t1 = Math.max(t0 + 60000, new Date(ms[ms.length - 1].t).getTime());
     const X = (t) => izq + pw * ((t - t0) / (t1 - t0));
-    const Y = (v) => arr + ph * (1 - v / max);
+    const Y = (v) => arr + ph * (1 - (v - min) / (max - min));
     // Ejes y rejilla recesivos
     ctx.strokeStyle = "rgba(154, 167, 180, 0.25)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(izq, Y(0) + 0.5); ctx.lineTo(izq + pw, Y(0) + 0.5); ctx.stroke();
     ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
     ctx.fillText("0", izq - 4, Y(0)); ctx.fillText(max.toFixed(max < 10 ? 1 : 0), izq - 4, Y(max) + 4);
-    // Umbral de alerta
-    ctx.strokeStyle = "#e5533d"; ctx.setLineDash([4, 3]); ctx.beginPath();
-    ctx.moveTo(izq, Y(umbral)); ctx.lineTo(izq + pw, Y(umbral)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "right"; ctx.fillText(String(umbral), izq - 4, Y(umbral));
-    ctx.textAlign = "left"; ctx.fillText("umbral", izq + 4, Y(umbral) - 7);
+    // Umbral de alerta (solo para el índice)
+    if (umbral != null) {
+      ctx.strokeStyle = "#e5533d"; ctx.setLineDash([4, 3]); ctx.beginPath();
+      ctx.moveTo(izq, Y(umbral)); ctx.lineTo(izq + pw, Y(umbral)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "right"; ctx.fillText(String(umbral), izq - 4, Y(umbral));
+      ctx.textAlign = "left"; ctx.fillText("umbral", izq + 4, Y(umbral) - 7);
+    }
     // Serie
     puntosGraf = ms.map(s => ({ x: X(new Date(s.t).getTime()), y: Y(valor(s)), s }));
     ctx.strokeStyle = "#f4a261"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
@@ -812,14 +832,14 @@
       ctx.fillStyle = "#f4a261"; ctx.strokeStyle = "#0f1419"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
       const t = new Date(p.s.t);
-      lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · índice " + valor(p.s).toFixed(2) + " %" + (ceniza
+      lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · " + (altura ? "tope " + Math.round(valor(p.s)) + " m" : "índice " + valor(p.s).toFixed(2) + " %") + (ceniza
         ? (p.s.calidos != null ? " · " + p.s.calidos + " más cálidos, " + p.s.oscuros + " más oscuros" : "") +
           (p.s.topeCol != null ? " · columna: tope " + p.s.topeCol + " m, alto " + p.s.altoCol + " m, ancho " + p.s.anchoCol + " m" : "")
         : (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "") +
           (p.s.topeInc != null ? " · tope " + p.s.topeInc + " m, alto " + p.s.altoInc + " m, ancho " + p.s.anchoInc + " m" : ""));
     } else {
       const u = ms[ms.length - 1];
-      lect.textContent = "Última: " + fmtLocal.format(new Date(u.t)) + " · " + valor(u).toFixed(2) + " % · " + ms.length + " muestras en 6 h";
+      lect.textContent = "Última: " + fmtLocal.format(new Date(u.t)) + " · " + (altura ? Math.round(valor(u)) : valor(u).toFixed(2)) + unidad + " · " + ms.length + " muestras en 6 h";
     }
   }
   grafico.addEventListener("mousemove", (ev) => dibujarGrafico(ev.clientX - grafico.getBoundingClientRect().left));
@@ -837,6 +857,17 @@
   function alturaDesdeY(y) { return (estado.calib.y0 - y) / estado.calib.pxPor100m * 100; }
   function yDesdeAltura(h) { return estado.calib.y0 - h / 100 * estado.calib.pxPor100m; }
 
+  // Etiqueta sobre la imagen: texto en color sobre una pastilla oscura
+  // semitransparente. El ancho se estima por el número de caracteres.
+  function etiqueta(x, yCentro, texto, color, tam) {
+    tam = tam || 16;
+    const ancho = Math.round(texto.length * tam * 0.56) + 14, alto = Math.round(tam * 1.55);
+    const gr = el("g", { "pointer-events": "none" });
+    gr.appendChild(el("rect", { x, y: yCentro - alto / 2, width: ancho, height: alto, rx: 5, fill: "rgba(10,14,20,0.78)", stroke: color, "stroke-width": 1 }));
+    gr.appendChild(el("text", { x: x + 7, y: yCentro + tam * 0.36, fill: color, "font-size": tam, "font-weight": 600,
+      "font-family": "system-ui, sans-serif" }, texto));
+    return gr;
+  }
   function dibujarOverlay() {
     const c = estado.calib, H = refH();
     overlay.setAttribute("viewBox", "0 0 " + REF_W + " " + H);
@@ -860,6 +891,7 @@
       const y = yDesdeAltura(h);
       linea(c.x - 3.5, y, c.x + 3.5, y, 1);
     }
+    if (typeof pnDibujarMascara === "function") pnDibujarMascara();
     dibujarSilueta();
     overlay.appendChild(g);
 
@@ -869,10 +901,9 @@
       const gm = el("g", { stroke: "#f4a261", "stroke-width": 2 });
       gm.appendChild(el("line", { x1: 0, y1: y, x2: REF_W, y2: y, "stroke-dasharray": "8 6" }));
       gm.appendChild(el("circle", { cx: c.x, cy: y, r: 6, fill: "#f4a261", stroke: "#000" }));
-      const et = el("text", { x: c.x - 18, y: y - 10, "text-anchor": "end", fill: "#f4a261", "font-size": 18, "font-weight": "700",
-        stroke: "rgba(0,0,0,0.8)", "stroke-width": 4, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, fmtM(h));
-      gm.appendChild(et);
       overlay.appendChild(gm);
+      const txtM = fmtM(h);
+      overlay.appendChild(etiqueta(c.x - 22 - Math.round(txtM.length * 18 * 0.56) - 14, y - 18, txtM, "#f4a261", 18));
     }
 
     // Zonas de detección: la ROI del cráter (incandescencia, rojo) y la
@@ -890,13 +921,21 @@
       const colorGuia = COLOR_GUIA[mm.modo] || COLOR_GUIA.incand;
       const gm = el("g", { stroke: colorGuia, fill: "none", "stroke-width": 1.2, "pointer-events": "none" });
       gm.appendChild(el("rect", { x: mm.izqRef, y: mm.topRef, width: mm.derRef - mm.izqRef, height: mm.botRef - mm.topRef }));
-      const xc = mm.modo === "ceniza" ? mm.derRef + 8 : Math.max(mm.derRef, r.x + r.w) + 8;
-      gm.appendChild(el("line", { x1: mm.derRef, y1: mm.topRef, x2: xc + 4, y2: mm.topRef, "stroke-dasharray": "3 2" }));
+      // Etiqueta con fondo oscuro, legible sobre cielo, nubes o nieve. Va a
+      // la derecha de la mancha si cabe; si no, a la izquierda. Nunca queda
+      // bajo la barra superior ni fuera de la imagen.
+      const txt = (mm.modo === "ceniza" ? "columna " : "tope ") + fmtM(mm.topeM) + (mm.corteArriba ? " o más" : "") +
+        " · alto " + fmtTam(mm.altoM) + " · ancho " + fmtTam(mm.anchoM);
+      const anchoEt = Math.round(txt.length * 16 * 0.56) + 14, H = refH();
+      const derecha = mm.derRef + 16 + anchoEt <= REF_W - 8;
+      const xc = derecha ? (mm.modo === "ceniza" ? mm.derRef + 8 : Math.max(mm.derRef, r.x + r.w) + 8) : mm.izqRef - 8;
+      const xEt = derecha ? xc + 8 : Math.max(8, xc - 8 - anchoEt);
+      const yEt = Math.min(H - 30, Math.max(85, mm.topRef));
+      gm.appendChild(el("line", { x1: derecha ? mm.derRef : mm.izqRef, y1: mm.topRef, x2: xc + (derecha ? 4 : -4), y2: mm.topRef, "stroke-dasharray": "3 2" }));
       gm.appendChild(el("line", { x1: xc, y1: mm.topRef, x2: xc, y2: mm.botRef }));
       gm.appendChild(el("line", { x1: xc - 3, y1: mm.botRef, x2: xc + 3, y2: mm.botRef }));
-      gm.appendChild(el("text", { x: xc + 7, y: mm.topRef + 4, fill: colorGuia, stroke: "rgba(0,0,0,0.6)", "stroke-width": 2.5,
-        "paint-order": "stroke", "font-size": 13, "font-family": "system-ui, sans-serif" }, (mm.modo === "ceniza" ? "columna " : "tope ") + fmtM(mm.topeM)));
       overlay.appendChild(gm);
+      overlay.appendChild(etiqueta(xEt, yEt, txt, colorGuia));
     }
     if (estado.modoUi === "calibrar") {
       overlay.appendChild(el("circle", { cx: c.x, cy: c.y0, r: 10, fill: "#4cc9f0", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "base" }));
@@ -1019,6 +1058,7 @@
         "</td><td class='num'>" + (r.indice != null ? r.indice.toFixed(2) : "") +
         "</td><td class='num'>" + (r.topeInc != null ? r.topeInc : "") + "</td><td class='num'>" + (r.altoInc != null ? r.altoInc : "") +
         "</td><td class='num'>" + (r.anchoInc != null ? r.anchoInc : "") + "</td><td class='num'>" + (r.indCen != null ? r.indCen.toFixed(2) : "") +
+        "</td><td class='num'>" + (r.pnCen != null ? r.pnCen.toFixed(2) : "") +
         "</td><td>" + escapar(r.nota || "") +
         "</td><td><button class='quitar' title='Quitar' data-i='" + idx + "'>✕</button></td>";
       tb.appendChild(tr);
@@ -1040,6 +1080,7 @@
       altoInc: m && m.mancha ? Math.round(m.mancha.altoM) : null,
       anchoInc: m && m.mancha ? Math.round(m.mancha.anchoM) : null,
       indCen: m && m.ceniza ? +m.ceniza.indice.toFixed(2) : null,
+      pnCen: estado.pn ? +estado.pn.ceniza.toFixed(2) : null,
       nota: $("r-nota").value.trim()
     });
     guardar(LS.registro, estado.registro); renderRegistro(); $("r-nota").value = "";
@@ -1050,17 +1091,18 @@
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = nombre; a.click();
   }
   $("btn-exp-registro").addEventListener("click", () => {
-    descargarCsv("registro_tata.csv", [["fecha_hora_local", "iso_utc", "tipo", "altura_m", "indice_incand_pct", "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "nota"]]
-      .concat(estado.registro.map(r => [horaLocal(new Date(r.t)), r.t, r.tipo, r.altura, r.indice, r.topeInc, r.altoInc, r.anchoInc, r.indCen, r.nota])));
+    descargarCsv("registro_tata.csv", [["fecha_hora_local", "iso_utc", "tipo", "altura_m", "indice_incand_pct", "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "pn_ceniza_pct", "nota"]]
+      .concat(estado.registro.map(r => [horaLocal(new Date(r.t)), r.t, r.tipo, r.altura, r.indice, r.topeInc, r.altoInc, r.anchoInc, r.indCen, r.pnCen, r.nota])));
   });
   $("btn-borrar-registro").addEventListener("click", () => {
     if (confirm("¿Borrar todo el registro de observaciones de este navegador?")) { estado.registro = []; guardar(LS.registro, []); renderRegistro(); }
   });
   $("btn-exp-muestras").addEventListener("click", () => {
     descargarCsv("muestras_deteccion.csv", [["fecha_hora_local", "iso_utc", "detector", "lum_cielo", "camara_bn", "indice_incand_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo",
-      "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "tope_columna_m", "alto_columna_m", "ancho_columna_m"]]
+      "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "tope_columna_m", "alto_columna_m", "ancho_columna_m",
+      "pn_ceniza_pct", "pn_gas_pct", "pn_tope_ceniza_m", "pn_ceniza_sale_del_recorte", "pn_tope_gas_m"]]
       .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.modo === "ceniza" ? "dia" : "noche", s.lumCielo, s.bn, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo,
-        s.topeInc, s.altoInc, s.anchoInc, s.indCen, s.calidos, s.oscuros, s.topeCol, s.altoCol, s.anchoCol])));
+        s.topeInc, s.altoInc, s.anchoInc, s.indCen, s.calidos, s.oscuros, s.topeCol, s.altoCol, s.anchoCol, s.pnCen, s.pnGas, s.pnTope, s.pnSale, s.pnTopeGas])));
   });
   $("btn-borrar-muestras").addEventListener("click", () => {
     if (confirm("¿Borrar las muestras de los índices de incandescencia y ceniza?")) { estado.muestras = []; guardar(LS.muestras, []); dibujarGrafico(); }
@@ -1118,6 +1160,10 @@
   $("n-muestreo").addEventListener("change", () => { $("n-muestreo-ins").checked = $("n-muestreo").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   $("n-muestreo-ins").addEventListener("change", () => { $("n-muestreo").checked = $("n-muestreo-ins").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
+  document.querySelectorAll("[data-graf]").forEach(b => b.addEventListener("click", () => {
+    estado.ajustes.grafVar = b.dataset.graf; guardar(LS.ajustes, estado.ajustes);
+    renderInserto(); dibujarGrafico();
+  }));
   $("btn-fondo").addEventListener("click", () => { reiniciarFondo(); actualizarInserto(); });
   // Selector de detector en el recuadro: automático, ceniza o incandescencia.
   document.querySelectorAll("[data-det]").forEach(b => b.addEventListener("click", () => {
@@ -1193,6 +1239,242 @@
       .catch(() => { $("silueta-nota").textContent = "No se pudo copiar al portapapeles."; });
   });
 
+  // ---------- VIGIA-PlumeNet en el navegador ----------
+  // Modelo de Giffard-Roisin et al. (Volcanica, 2026), pesos CC0, convertido
+  // a ONNX (32 bits, idéntico al original). Corre en un worker con ONNX
+  // Runtime Web: WebGPU si el navegador lo tiene, si no WebAssembly. El
+  // modelo se descarga una vez y queda guardado en IndexedDB.
+  // Clases: 0 fondo, 1 columna eruptiva, 2 terreno, 3 ceniza, 4 gas, 5 lava.
+  const PN_CFG = Object.assign({
+    url: "modelos/vigia_plumenet_fp32.onnx",
+    ortBase: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/",
+    recorte: { x: 760, y: 0, w: 1160, h: 653 },
+    intervalo: 30,
+    umbral: 2
+  }, CFG.plumenet || {});
+  const PN_TAM = 518, PN_CELDAS = 37;
+  const PN_COLORES = { 1: [240, 110, 40], 3: [214, 160, 70], 4: [150, 220, 255], 5: [255, 40, 40] };
+  const CODIGO_WORKER_PN = `
+let sesion = null, ep = null;
+self.onmessage = async (ev) => {
+  const m = ev.data;
+  try {
+    if (m.tipo === "cargar") {
+      importScripts(m.ortUrl);
+      ort.env.wasm.wasmPaths = m.wasmBase;
+      ort.env.wasm.numThreads = 1;
+      let ultimoError = null;
+      for (const e of (m.webgpu ? ["webgpu", "wasm"] : ["wasm"])) {
+        try { sesion = await ort.InferenceSession.create(m.modelo, { executionProviders: [e], graphOptimizationLevel: "all" }); ep = e; break; }
+        catch (err) { ultimoError = err; }
+      }
+      if (!sesion) throw ultimoError;
+      postMessage({ tipo: "listo", ep });
+    } else if (m.tipo === "analizar") {
+      const t0 = performance.now();
+      const x = new ort.Tensor("float32", m.datos, [1, 3, ${PN_TAM}, ${PN_TAM}]);
+      const salida = await sesion.run({ [sesion.inputNames[0]]: x });
+      const l = salida[sesion.outputNames[0]].data;
+      const n = ${PN_TAM * PN_TAM}, clases = new Uint8Array(n);
+      let sumaConf = 0;
+      for (let p = 0; p < n; p++) {
+        let mejor = 0, vmax = l[p];
+        for (let k = 1; k < 6; k++) { const v = l[k * n + p]; if (v > vmax) { vmax = v; mejor = k; } }
+        let s = 0;
+        for (let k = 0; k < 6; k++) s += Math.exp(l[k * n + p] - vmax);
+        clases[p] = mejor; sumaConf += 1 / s;
+      }
+      postMessage({ tipo: "resultado", id: m.id, clases, confianza: sumaConf / n, ms: performance.now() - t0 }, [clases.buffer]);
+    }
+  } catch (e) { postMessage({ tipo: "error", id: m.id, mensaje: String((e && e.message) || e) }); }
+};`;
+  const PN = { worker: null, listo: false, ep: null, ocupado: false, timer: null, id: 0, pedido: null };
+  estado.pn = null;
+  estado.pnRecorte = Object.assign({}, PN_CFG.recorte, leer("tata.pnrecorte.v1", {}));
+
+  function pnEstado(msg) { $("pn-estado").textContent = msg; }
+  function idbAbrir() {
+    return new Promise((ok, mal) => {
+      const r = indexedDB.open("tata-modelos", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("modelos");
+      r.onsuccess = () => ok(r.result); r.onerror = () => mal(r.error);
+    });
+  }
+  async function idbOperar(modo, fn) {
+    const db = await idbAbrir();
+    return new Promise((ok, mal) => {
+      const tx = db.transaction("modelos", modo), req = fn(tx.objectStore("modelos"));
+      tx.oncomplete = () => ok(req && req.result); tx.onerror = () => mal(tx.error);
+    });
+  }
+  const idbLeer = (k) => idbOperar("readonly", (s) => s.get(k));
+  const idbGuardar = (k, v) => idbOperar("readwrite", (s) => s.put(v, k));
+  const idbBorrar = (k) => idbOperar("readwrite", (s) => s.delete(k));
+
+  function pnIniciar(buffer, origen) {
+    if (PN.worker) PN.worker.terminate();
+    PN.listo = false; PN.ocupado = false;
+    const url = URL.createObjectURL(new Blob([CODIGO_WORKER_PN], { type: "text/javascript" }));
+    PN.worker = new Worker(url);
+    PN.worker.onmessage = pnMensaje;
+    PN.worker.onerror = (e) => pnEstado("Error en el proceso del modelo: " + (e.message || "desconocido") + ".");
+    pnEstado("Iniciando el modelo (" + origen + ", " + (buffer.byteLength / 1e6).toFixed(0) + " MB)...");
+    PN.worker.postMessage({ tipo: "cargar", modelo: buffer, ortUrl: PN_CFG.ortBase + "ort.webgpu.min.js", wasmBase: PN_CFG.ortBase,
+      webgpu: !!navigator.gpu }, [buffer]);
+  }
+  async function pnGuardarEIniciar(buffer, origen) {
+    try { await idbGuardar("plumenet", buffer.slice(0)); } catch (e) { /* sin almacenamiento: se usa igual */ }
+    pnIniciar(buffer, origen);
+  }
+  async function pnCargarDesdeSitio() {
+    if (!/^https?:$/.test(location.protocol)) {
+      pnEstado("Desde un archivo local no se puede descargar el modelo del sitio. Use «Cargar archivo .onnx».");
+      return;
+    }
+    try {
+      pnEstado("Descargando el modelo...");
+      const r = await fetch(PN_CFG.url);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const total = +r.headers.get("content-length") || 0, lector = r.body.getReader(), partes = [];
+      let recibido = 0;
+      for (;;) {
+        const { done, value } = await lector.read();
+        if (done) break;
+        partes.push(value); recibido += value.length;
+        pnEstado("Descargando el modelo: " + (recibido / 1e6).toFixed(0) + (total ? " de " + (total / 1e6).toFixed(0) : "") + " MB...");
+      }
+      const buf = new Uint8Array(recibido);
+      let o = 0; for (const p of partes) { buf.set(p, o); o += p.length; }
+      await pnGuardarEIniciar(buf.buffer, "descargado del sitio");
+    } catch (e) { pnEstado("No se pudo descargar el modelo: " + e.message + "."); }
+  }
+  function pnMensaje(ev) {
+    const m = ev.data;
+    if (m.tipo === "listo") {
+      PN.listo = true; PN.ep = m.ep;
+      pnEstado("Modelo listo, en " + (m.ep === "webgpu" ? "WebGPU (tarjeta gráfica)" : "WebAssembly (procesador)") + ".");
+      pnProgramar();
+      if (estado.ajustes.pnAuto) pnAnalizar();
+    } else if (m.tipo === "resultado") {
+      PN.ocupado = false;
+      if (PN.pedido && PN.pedido.id === m.id) pnResultado(m, PN.pedido);
+    } else if (m.tipo === "error") {
+      PN.ocupado = false;
+      pnEstado("Error del modelo: " + m.mensaje);
+    }
+  }
+  function pnProgramar() {
+    if (PN.timer) { clearInterval(PN.timer); PN.timer = null; }
+    if (PN.listo && estado.ajustes.pnAuto) PN.timer = setInterval(pnAnalizar, Math.max(5, estado.ajustes.pnIntervalo || PN_CFG.intervalo) * 1000);
+  }
+  const lienzoPN = document.createElement("canvas");
+  function pnAnalizar(forzar) {
+    if (!PN.listo || PN.ocupado) return;
+    if (!forzar && estado.ajustes.pnSoloDia !== false && !estado.esDia) { pnEstado("En pausa: de noche el modelo no aplica. Modelo listo."); return; }
+    if (!estado.pixelesOk) { pnEstado("Sin acceso a los píxeles de la imagen (CORS)."); return; }
+    const z = rectEnCuadro(estado.pnRecorte);
+    if (!z) return;
+    let d;
+    try { d = leerRect(lienzoPN, z, PN_TAM, PN_TAM).data; } catch (e) { return; }
+    const n = PN_TAM * PN_TAM, datos = new Float32Array(3 * n);
+    for (let p = 0, i = 0; p < n; p++, i += 4) { datos[p] = d[i] / 255; datos[n + p] = d[i + 1] / 255; datos[2 * n + p] = d[i + 2] / 255; }
+    PN.ocupado = true;
+    PN.pedido = { id: ++PN.id, z, t: Date.now(), rectRef: Object.assign({}, estado.pnRecorte) };
+    pnEstado("Analizando...");
+    PN.worker.postMessage({ tipo: "analizar", id: PN.id, datos }, [datos.buffer]);
+  }
+  function pnMedir(clases, z, valores) {
+    // Máscara a la mitad de resolución: la grilla del modelo es más gruesa.
+    const w = PN_TAM / 2, n = w * w, mascara = new Uint8Array(n);
+    let cuenta = 0;
+    for (let y = 0; y < PN_TAM; y++) for (let x = 0; x < PN_TAM; x++) if (valores.includes(clases[y * PN_TAM + x])) cuenta++;
+    for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) mascara[y * w + x] = valores.includes(clases[2 * y * PN_TAM + 2 * x]) ? 1 : 0;
+    const sx = z.w / w, sy = z.h / w, r = estado.roi, cx = z.w / PN_CELDAS, cy = z.h / PN_CELDAS;
+    // Caja del cráter ampliada en una celda del modelo.
+    const caja = { x0: (r.x * z.f - z.x - cx) / sx, x1: ((r.x + r.w) * z.f - z.x + cx) / sx,
+                   y0: (r.y * z.f - z.y - cy) / sy, y1: ((r.y + r.h) * z.f - z.y + cy) / sy };
+    const m = manchaMayor(mascara, w, w, caja);
+    return { pct: 100 * cuenta / (PN_TAM * PN_TAM), medidas: m ? medirEnMetros(m, { ox: z.x, oy: z.y, sx, sy, f: z.f }, w, w) : null };
+  }
+  function pnResultado(m, pedido) {
+    const z = pedido.z, ceniza = pnMedir(m.clases, z, [1, 3]), gas = pnMedir(m.clases, z, [4]), lava = pnMedir(m.clases, z, [5]);
+    // Máscara de color para superponer en la imagen.
+    lienzoPN.width = PN_TAM; lienzoPN.height = PN_TAM;
+    const ctx = lienzoPN.getContext("2d"), img = ctx.createImageData(PN_TAM, PN_TAM), o = img.data;
+    for (let p = 0, i = 0; p < m.clases.length; p++, i += 4) {
+      const c = PN_COLORES[m.clases[p]];
+      if (c) { o[i] = c[0]; o[i + 1] = c[1]; o[i + 2] = c[2]; o[i + 3] = 150; }
+    }
+    ctx.putImageData(img, 0, 0);
+    estado.pn = { t: pedido.t, ms: m.ms, ep: PN.ep, confianza: m.confianza, rectRef: pedido.rectRef, url: lienzoPN.toDataURL("image/png"),
+      ceniza: ceniza.pct, gas: gas.pct, lava: lava.pct, colCeniza: ceniza.medidas, colGas: gas.medidas };
+    pnEstado("Modelo listo, en " + (PN.ep === "webgpu" ? "WebGPU" : "WebAssembly") + ". Último análisis: " + fmtLocal.format(new Date(pedido.t)) +
+      ", " + (m.ms / 1000).toFixed(1) + " s.");
+    pnTexto();
+    dibujarOverlay();
+  }
+  function pnTope(c) {
+    if (!c) return "";
+    return c.corteArriba ? " · tope ≥ <strong>" + fmtM(c.topeM) + "</strong> (sale del recorte)" : " · tope <strong>" + fmtM(c.topeM) + "</strong>";
+  }
+  function pnTexto() {
+    const el2 = $("pn-info"), p = estado.pn;
+    if (!p) { el2.hidden = true; return; }
+    el2.hidden = false;
+    const edad = Math.round((Date.now() - p.t) / 1000);
+    const alerta = p.ceniza >= (estado.ajustes.pnUmbral != null ? estado.ajustes.pnUmbral : PN_CFG.umbral) && p.colCeniza;
+    el2.classList.toggle("alerta", !!alerta);
+    el2.innerHTML = "PlumeNet, hace " + (edad < 90 ? edad + " s" : Math.round(edad / 60) + " min") + ": ceniza <strong>" + p.ceniza.toFixed(1) + " %</strong>" + pnTope(p.colCeniza) +
+      " · gas <strong>" + p.gas.toFixed(1) + " %</strong>" + pnTope(p.colGas) + (p.lava > 0.05 ? " · lava " + p.lava.toFixed(1) + " %" : "") +
+      (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "");
+  }
+  setInterval(() => { if (estado.pn) pnTexto(); }, 5000);
+  function pnDibujarMascara() {
+    const p = estado.pn;
+    if (!p || estado.ajustes.pnMascara === false || Date.now() - p.t > 10 * 60 * 1000) return;
+    const r = p.rectRef;
+    overlay.appendChild(el("image", { href: p.url, x: r.x, y: r.y, width: r.w, height: r.h, preserveAspectRatio: "none", opacity: 0.55, "pointer-events": "none" }));
+  }
+  function pnLlenar() {
+    const a = estado.ajustes, r = estado.pnRecorte;
+    $("pn-auto").checked = !!a.pnAuto; $("pn-int").value = a.pnIntervalo || PN_CFG.intervalo;
+    $("pn-solo-dia").checked = a.pnSoloDia !== false; $("pn-mascara").checked = a.pnMascara !== false;
+    $("pn-umbral").value = a.pnUmbral != null ? a.pnUmbral : PN_CFG.umbral;
+    $("pn-recorte").value = [r.x, r.y, r.w, r.h].map(v => Math.round(v)).join(", ");
+  }
+  function pnLeer() {
+    const a = estado.ajustes;
+    a.pnAuto = $("pn-auto").checked; a.pnIntervalo = Math.max(5, +$("pn-int").value || PN_CFG.intervalo);
+    a.pnSoloDia = $("pn-solo-dia").checked; a.pnMascara = $("pn-mascara").checked;
+    a.pnUmbral = Math.max(0, +$("pn-umbral").value || 0);
+    const q = $("pn-recorte").value.split(/[,\s]+/).map(Number).filter(v => !isNaN(v));
+    if (q.length === 4) { estado.pnRecorte = { x: q[0], y: q[1], w: Math.max(50, q[2]), h: Math.max(50, q[3]) }; guardar("tata.pnrecorte.v1", estado.pnRecorte); }
+    guardar(LS.ajustes, a); pnProgramar(); pnTexto(); dibujarOverlay();
+  }
+  ["pn-auto", "pn-int", "pn-solo-dia", "pn-mascara", "pn-umbral", "pn-recorte"].forEach(id => $(id).addEventListener("change", pnLeer));
+  $("pn-cargar-sitio").addEventListener("click", pnCargarDesdeSitio);
+  $("pn-archivo").addEventListener("change", async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    pnEstado("Leyendo " + f.name + "...");
+    await pnGuardarEIniciar(await f.arrayBuffer(), "archivo " + f.name);
+    ev.target.value = "";
+  });
+  $("pn-olvidar").addEventListener("click", async () => {
+    if (PN.worker) PN.worker.terminate();
+    PN.worker = null; PN.listo = false; estado.pn = null; pnProgramar();
+    try { await idbBorrar("plumenet"); } catch (e) {}
+    pnEstado("Modelo borrado de este navegador."); pnTexto(); dibujarOverlay();
+  });
+  $("pn-ahora").addEventListener("click", () => pnAnalizar(true));
+  // Al abrir, si el modelo ya está guardado en este navegador, se inicia solo.
+  function pnAlIniciar() {
+    pnLlenar();
+    if (!window.indexedDB) { pnEstado("Este navegador no permite guardar el modelo."); return; }
+    idbLeer("plumenet").then((buf) => { if (buf) pnIniciar(buf, "guardado en el navegador"); else pnEstado("Modelo no cargado."); })
+      .catch(() => pnEstado("Modelo no cargado."));
+  }
+
   // ---------- Barra superior, panel lateral y pantalla completa ----------
   document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
     estado.ajustes.modo = b.dataset.fuente;
@@ -1245,6 +1527,7 @@
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;
+  pnAlIniciar();
   mostrarInserto(estado.ajustes.inserto !== false);
   mostrarMarco(estado.ajustes.marco !== false);
   $("btn-silueta").classList.toggle("activo", !!estado.silueta && estado.ajustes.silueta !== false);

@@ -187,6 +187,8 @@ def medir_en_metros(m, ox, oy, sx, sy, f, wm, hm):
         "alto_m": (bot_ref - top_ref) * m_por_px,
         "ancho_m": (der_ref - izq_ref) * m_por_px,
         "recortada": top == 0 or izq == 0 or bot == hm - 1 or der == wm - 1,
+        # Solo si toca el borde superior el tope real puede estar más arriba.
+        "corte_arriba": top == 0,
     }
 
 
@@ -556,7 +558,7 @@ def main():
                 def tope(m):
                     if not m:
                         return ""
-                    return f" tope ≥ {m['tope_m']:.0f} m (sale del recorte)" if m["recortada"] else f" tope {m['tope_m']:.0f} m"
+                    return f" tope ≥ {m['tope_m']:.0f} m (sale del recorte)" if m["corte_arriba"] else f" tope {m['tope_m']:.0f} m"
                 texto += f" · PlumeNet: ceniza {pn_res['ceniza_pct']:.1f} %" + tope(tc)
                 texto += f", gas {pn_res['gas_pct']:.1f} %" + tope(tg)
             anotar(im, f, texto, modo, mc if modo == "ceniza" else mi).save(salida / "cuadros_escala" / f"{nombre}.jpg", quality=90)
@@ -578,8 +580,8 @@ def main():
                     ([fmt(pn_res["ceniza_pct"], 2), fmt(pn_res["gas_pct"], 2),
                       fmt(pn_res["ceniza_medidas"] and pn_res["ceniza_medidas"]["tope_m"]),
                       fmt(pn_res["gas_medidas"] and pn_res["gas_medidas"]["tope_m"]), fmt(pn_res["confianza"], 2),
-                      "" if not pn_res["ceniza_medidas"] else int(pn_res["ceniza_medidas"]["recortada"]),
-                      "" if not pn_res["gas_medidas"] else int(pn_res["gas_medidas"]["recortada"])]
+                      "" if not pn_res["ceniza_medidas"] else int(pn_res["ceniza_medidas"]["corte_arriba"]),
+                      "" if not pn_res["gas_medidas"] else int(pn_res["gas_medidas"]["corte_arriba"])]
                      if pn_res is not None else ["", "", "", "", "", "", ""]))
             print(f"{t:%H:%M:%S} {im.width}x{im.height} cielo={lum_cielo:.0f} color={colorido:.1f} → {texto.split(' · ', 2)[-1]}", flush=True)
         except Exception as e:  # noqa: BLE001
