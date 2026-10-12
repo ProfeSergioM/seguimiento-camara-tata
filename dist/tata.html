@@ -267,7 +267,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
           <button class="boton primario" id="btn-cal-aplicar">Aplicar</button>
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
         </div>
-        <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta la cumbre, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles del cuadro nativo de la cámara, de 1920 × 1080 px.</p>
+        <p class="nota">En modo Calibrar se puede arrastrar el punto base (0 m) hasta el borde del cráter activo, el punto superior para fijar la escala y el rectángulo de la ROI. Las coordenadas son píxeles del cuadro nativo de la cámara, de 1920 × 1080 px.</p>
         <h3 class="subtitulo">Silueta del volcán</h3>
         <div class="acciones">
           <button class="boton" id="btn-trazar-silueta" title="Trazar la silueta desde la imagen actual">Trazar silueta</button>
@@ -337,7 +337,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
     </details>
   </section>
   <footer class="pie">
-    <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
+    <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre el borde del cráter activo, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
     <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, S silueta, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
   </footer>
 </aside>
@@ -437,7 +437,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 g";
+  const VERSION = "2026-10-12 h";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -783,7 +783,7 @@ window.CAM_CONFIG = {
   }
 
   // Convierte una mancha de la máscara a coordenadas de referencia y a
-  // metros con la calibración: tope sobre la cumbre, alto y ancho. En el
+  // metros con la calibración: tope sobre el cráter, alto y ancho. En el
   // plano del cráter un píxel cubre la misma distancia en horizontal y en
   // vertical. `mapa` lleva un píxel de la máscara al cuadro real.
   function medirEnMetros(m, mapa, wm, hm) {
@@ -1132,7 +1132,7 @@ window.CAM_CONFIG = {
     estado.mancha = mm ? Object.assign({ t: Date.now(), modo }, mm) : null;
     const nombre = modo === "ceniza" ? "Columna" : "Mancha principal";
     $("roi-mancha").innerHTML = mm
-      ? nombre + ": tope <strong>" + fmtM(mm.topeM) + "</strong> sobre la cumbre · alto <strong>" + fmtTam(mm.altoM) +
+      ? nombre + ": tope <strong>" + fmtM(mm.topeM) + "</strong> sobre el cráter · alto <strong>" + fmtTam(mm.altoM) +
         "</strong> · ancho <strong>" + fmtTam(mm.anchoM) + "</strong> · " + mm.px + " px" + (mm.recortada ? " · <em>toca el borde de la zona</em>" : "")
       : (r ? (modo === "ceniza" ? "Sin columna conectada al cráter" : "Sin mancha detectada") : "");
     $("btn-usar-tope").disabled = !mm;
@@ -1336,7 +1336,7 @@ window.CAM_CONFIG = {
       overlay.appendChild(el("circle", { cx: c.x, cy: c.y0, r: 10, fill: "#4cc9f0", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "base" }));
       overlay.appendChild(el("circle", { cx: c.x, cy: yTop, r: 10, fill: "#52b788", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "tope" }));
       overlay.appendChild(el("text", { x: c.x - 18, y: c.y0 + 5, "text-anchor": "end", fill: "#4cc9f0", "font-size": 14, stroke: "rgba(0,0,0,0.8)",
-        "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "0 m: arrastre a la cumbre"));
+        "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "0 m: arrastre al borde del cráter"));
       overlay.appendChild(el("text", { x: c.x - 18, y: yTop + 5, "text-anchor": "end", fill: "#52b788", "font-size": 14, stroke: "rgba(0,0,0,0.8)",
         "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, c.alturaMax + " m: arrastre para escalar"));
       // esquina de la ROI para redimensionar
@@ -1352,7 +1352,7 @@ window.CAM_CONFIG = {
     $("btn-borrar-medida").hidden = estado.marcadorY == null;
     if (estado.marcadorY == null) { lectura.innerHTML = "Altura: <strong>--</strong>"; return; }
     const h = alturaDesdeY(estado.marcadorY);
-    lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre la cumbre";
+    lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre el cráter";
   }
 
   function puntoSvg(ev) {

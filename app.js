@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 g";
+  const VERSION = "2026-10-12 h";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -349,7 +349,7 @@
   }
 
   // Convierte una mancha de la máscara a coordenadas de referencia y a
-  // metros con la calibración: tope sobre la cumbre, alto y ancho. En el
+  // metros con la calibración: tope sobre el cráter, alto y ancho. En el
   // plano del cráter un píxel cubre la misma distancia en horizontal y en
   // vertical. `mapa` lleva un píxel de la máscara al cuadro real.
   function medirEnMetros(m, mapa, wm, hm) {
@@ -698,7 +698,7 @@
     estado.mancha = mm ? Object.assign({ t: Date.now(), modo }, mm) : null;
     const nombre = modo === "ceniza" ? "Columna" : "Mancha principal";
     $("roi-mancha").innerHTML = mm
-      ? nombre + ": tope <strong>" + fmtM(mm.topeM) + "</strong> sobre la cumbre · alto <strong>" + fmtTam(mm.altoM) +
+      ? nombre + ": tope <strong>" + fmtM(mm.topeM) + "</strong> sobre el cráter · alto <strong>" + fmtTam(mm.altoM) +
         "</strong> · ancho <strong>" + fmtTam(mm.anchoM) + "</strong> · " + mm.px + " px" + (mm.recortada ? " · <em>toca el borde de la zona</em>" : "")
       : (r ? (modo === "ceniza" ? "Sin columna conectada al cráter" : "Sin mancha detectada") : "");
     $("btn-usar-tope").disabled = !mm;
@@ -902,7 +902,7 @@
       overlay.appendChild(el("circle", { cx: c.x, cy: c.y0, r: 10, fill: "#4cc9f0", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "base" }));
       overlay.appendChild(el("circle", { cx: c.x, cy: yTop, r: 10, fill: "#52b788", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "tope" }));
       overlay.appendChild(el("text", { x: c.x - 18, y: c.y0 + 5, "text-anchor": "end", fill: "#4cc9f0", "font-size": 14, stroke: "rgba(0,0,0,0.8)",
-        "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "0 m: arrastre a la cumbre"));
+        "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "0 m: arrastre al borde del cráter"));
       overlay.appendChild(el("text", { x: c.x - 18, y: yTop + 5, "text-anchor": "end", fill: "#52b788", "font-size": 14, stroke: "rgba(0,0,0,0.8)",
         "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, c.alturaMax + " m: arrastre para escalar"));
       // esquina de la ROI para redimensionar
@@ -918,7 +918,7 @@
     $("btn-borrar-medida").hidden = estado.marcadorY == null;
     if (estado.marcadorY == null) { lectura.innerHTML = "Altura: <strong>--</strong>"; return; }
     const h = alturaDesdeY(estado.marcadorY);
-    lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre la cumbre";
+    lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre el cráter";
   }
 
   function puntoSvg(ev) {
