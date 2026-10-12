@@ -54,7 +54,11 @@ ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
 ZONA_COLUMNA = {"x": 568, "y": 241, "w": 600, "h": 335}
 UMBRAL_BRILLO = 200
 ANCHO_CENIZA = 300          # ancho de la zona de columna reducida, en píxeles
-COLOR_MIN_DIA, LUM_MIN_DIA = 4.0, 45.0
+# Día o noche según la luminosidad del cielo (40 % superior del cuadro), no
+# según el color: la cámara tarda en pasar de blanco y negro a color al
+# amanecer, y al revés al atardecer. Con margen entre los umbrales de
+# entrada y salida, para que no alterne en el crepúsculo.
+LUM_CIELO_DIA, MARGEN_DIA, COLOR_MIN = 70.0, 8.0, 4.0
 COLORES = {
     "incand": {1: (255, 212, 0), 2: (0, 229, 255)},     # rojizo, brillante
     "ceniza": {1: (214, 140, 60), 2: (179, 136, 255)},  # más cálido, más oscuro
@@ -178,19 +182,26 @@ def rgb(img):
 
 
 def caracterizar(im):
-    """Luminancia media y colorido del cuadro sobre una copia reducida. El
-    colorido es casi cero cuando la cámara pasa a blanco y negro de noche."""
-    mini = im.resize((160, max(1, int(160 * im.height / im.width))))
-    lum, color, n = 0.0, 0.0, 0
+    """Luminancia media, colorido y luminosidad del cielo (40 % superior)
+    sobre una copia reducida. El colorido es casi cero cuando la cámara
+    transmite en blanco y negro."""
+    alto = max(1, int(160 * im.height / im.width))
+    mini = im.resize((160, alto))
+    fin_cielo = int(0.4 * alto) * 160
+    lum, color, cielo, n = 0.0, 0.0, 0.0, 0
     for R, G, B in rgb(mini):
-        lum += 0.299 * R + 0.587 * G + 0.114 * B
+        L = 0.299 * R + 0.587 * G + 0.114 * B
+        lum += L
+        if n < fin_cielo:
+            cielo += L
         color += (abs(R - G) + abs(G - B) + abs(B - R)) / 3.0
         n += 1
-    return lum / n, color / n
+    return lum / n, color / n, cielo / max(1, fin_cielo)
 
 
-def es_de_dia(lum, color):
-    return color >= COLOR_MIN_DIA and lum >= LUM_MIN_DIA
+def es_de_dia(lum_cielo, dia_previo):
+    umbral = LUM_CIELO_DIA - MARGEN_DIA if dia_previo else LUM_CIELO_DIA + MARGEN_DIA
+    return lum_cielo >= umbral
 
 
 def indice_incandescencia(im, f):
@@ -363,7 +374,7 @@ def anotar(im, f, texto, modo, medidas):
     return im
 
 
-CABECERA = ["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "colorido", "detector",
+CABECERA = ["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_cielo", "colorido", "detector",
             "indice_incand_pct", "lum_roi", "incandescencia", "tope_incand_m", "alto_incand_m", "ancho_incand_m",
             "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "posible_emision", "edad_fondo_min",
             "tope_columna_m", "alto_columna_m", "ancho_columna_m"]
@@ -430,6 +441,11 @@ def main():
     csv_path = salida / "registro.csv"
     preparar_csv(csv_path)
     fondo = FondoCeniza(salida, a.tau_fondo)
+    ruta_estado = salida / "estado_detector.json"
+    try:
+        estado_det = json.loads(ruta_estado.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        estado_det = {}
 
     url = None
     if a.modo == "hls":
@@ -448,8 +464,15 @@ def main():
                 descargar(url, crudo)
             im = Image.open(crudo).convert("RGB")
             f = im.width / REF_W
-            lum_cuadro, colorido = caracterizar(im)
-            dia = es_de_dia(lum_cuadro, colorido)
+            lum_cuadro, colorido, lum_cielo = caracterizar(im)
+            dia = es_de_dia(lum_cielo, estado_det.get("es_dia", False))
+            bn = colorido < COLOR_MIN
+            # Al cambiar la cámara entre blanco y negro y color, el tono de cada
+            # píxel salta de golpe: el fondo de ceniza se forma de nuevo.
+            if "bn" in estado_det and estado_det["bn"] != bn:
+                fondo.clave = None
+            estado_det.update(es_dia=dia, bn=bn)
+            ruta_estado.write_text(json.dumps(estado_det), encoding="utf-8")
             modo = a.detector if a.detector != "auto" else ("ceniza" if dia else "incand")
             inc = indice_incandescencia(im, f)
             cen = indice_ceniza(im, f, fondo, a.umbral_calidez, a.umbral_oscuro, time.time()) if (modo == "ceniza" or dia) else None
@@ -463,6 +486,8 @@ def main():
                     texto += f" · columna: tope {mc['tope_m']:.0f} m · alto {mc['alto_m']:.0f} m · ancho {mc['ancho_m']:.0f} m"
                 if cen["fondo_nuevo"]:
                     texto += " · fondo nuevo"
+                if bn:
+                    texto += " · cámara en b/n: solo oscurecimiento"
             else:
                 texto = f"Cámara Tata · {t.strftime('%Y-%m-%d %H:%M:%S')} · incandescencia {inc['indice']:.2f} %"
                 texto += " INCANDESCENCIA" if alerta_inc else ""
@@ -474,14 +499,14 @@ def main():
                 imagen_mascara(res, modo, 2 if modo == "ceniza" else 3).save(salida / "mascaras" / f"{nombre}_{modo}.png")
             with open(csv_path, "a", newline="", encoding="utf-8") as fh:
                 csv.writer(fh, delimiter=";").writerow([
-                    t.isoformat(timespec="seconds"), crudo.name, im.width, im.height, fmt(lum_cuadro, 1), fmt(colorido, 1),
+                    t.isoformat(timespec="seconds"), crudo.name, im.width, im.height, fmt(lum_cuadro, 1), fmt(lum_cielo, 1), fmt(colorido, 1),
                     "dia" if modo == "ceniza" else "noche",
                     fmt(inc["indice"], 2), fmt(inc["lum_roi"], 1), int(alerta_inc),
                     fmt(mi and mi["tope_m"]), fmt(mi and mi["alto_m"]), fmt(mi and mi["ancho_m"]),
                     fmt(cen and cen["indice"], 2), "" if not cen else cen["calidos"], "" if not cen else cen["oscuros"],
                     "" if not cen else int(alerta_cen), fmt(cen and cen["edad_fondo_s"] / 60, 1),
                     fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"])])
-            print(f"{t:%H:%M:%S} {im.width}x{im.height} lum={lum_cuadro:.0f} color={colorido:.1f} → {texto.split(' · ', 2)[-1]}", flush=True)
+            print(f"{t:%H:%M:%S} {im.width}x{im.height} cielo={lum_cielo:.0f} color={colorido:.1f} → {texto.split(' · ', 2)[-1]}", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{t:%H:%M:%S} error: {e}", file=sys.stderr, flush=True)
         if a.una_vez:

@@ -418,7 +418,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 c";
+  const VERSION = "2026-10-12 d";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -816,18 +816,35 @@ window.CAM_CONFIG = {
       const ctx = lienzoMini.getContext("2d", { willReadFrequently: true });
       ctx.drawImage(z.m, 0, 0, w, h);
       const d = ctx.getImageData(0, 0, w, h).data;
-      let s = 0, c = 0;
+      let s = 0, c = 0, sc = 0;
+      const finCielo = Math.floor(0.4 * h) * w * 4;
       for (let i = 0; i < d.length; i += 4) {
-        s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        const L = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        s += L; if (i < finCielo) sc += L;
         c += (Math.abs(d[i] - d[i + 1]) + Math.abs(d[i + 1] - d[i + 2]) + Math.abs(d[i + 2] - d[i])) / 3;
       }
       const n = d.length / 4;
-      return { lum: s / n, color: c / n };
+      return { lum: s / n, color: c / n, lumCielo: sc / (finCielo / 4) };
     } catch (e) { return null; }
   }
-  // De día: imagen en color y luminosa. Si no, se usa el detector nocturno.
-  const COLOR_MIN_DIA = 4, LUM_MIN_DIA = 45;
-  function esDeDia(car) { return !!car && car.color >= COLOR_MIN_DIA && car.lum >= LUM_MIN_DIA; }
+  // Día o noche según la luminosidad del cielo (40 % superior del cuadro),
+  // no según el color: la cámara tarda en pasar de blanco y negro a color
+  // al amanecer, y al revés al atardecer. Con margen entre los umbrales de
+  // entrada y salida, para que no alterne en el crepúsculo. En las
+  // imágenes disponibles el cielo da entre 109 y 141 de día, también en
+  // blanco y negro, y cerca de 40 de noche.
+  const LUM_CIELO_DIA = 70, MARGEN_DIA = 8, COLOR_MIN = 4;
+  function actualizarDiaNoche(car) {
+    if (!car) return;
+    const umbral = estado.esDia ? LUM_CIELO_DIA - MARGEN_DIA : LUM_CIELO_DIA + MARGEN_DIA;
+    estado.esDia = car.lumCielo >= umbral;
+    // Imagen en blanco y negro: sin color no hay calidez que medir. Al
+    // cambiar la cámara entre blanco y negro y color, el tono de cada
+    // píxel salta de golpe; el fondo de ceniza se forma de nuevo.
+    const bn = car.color < COLOR_MIN;
+    if (estado.bn != null && bn !== estado.bn) reiniciarFondo();
+    estado.bn = bn;
+  }
 
   // ---------- Incandescencia (noche) ----------
   // Clasificación de un píxel de la ROI del cráter:
@@ -933,14 +950,15 @@ window.CAM_CONFIG = {
   function detectorActivo() {
     const d = estado.ajustes.detector;
     if (d === "ceniza" || d === "incand") return d;
-    return esDeDia(estado.car) ? "ceniza" : "incand";
+    return estado.esDia ? "ceniza" : "incand";
   }
   function analizar() {
     estado.car = caracterizarCuadro();
+    actualizarDiaNoche(estado.car);
     estado.modoDet = detectorActivo();
     estado.anInc = analizarRoi();
-    estado.anCen = (estado.modoDet === "ceniza" || esDeDia(estado.car)) ? analizarCeniza() : null;
-    if (estado.anCen === null && estado.car && !esDeDia(estado.car)) reiniciarFondo();
+    estado.anCen = (estado.modoDet === "ceniza" || estado.esDia) ? analizarCeniza() : null;
+    if (estado.anCen === null && estado.car && !estado.esDia) reiniciarFondo();
   }
   function actualizarInserto() {
     analizar();
@@ -1006,6 +1024,7 @@ window.CAM_CONFIG = {
       const aprendiendo = r.edadFondo < 60;
       info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · más cálidos " + r.calidos + " · más oscuros " + r.oscuros +
         " de " + r.n + " px · fondo de " + Math.round(r.edadFondo / 60) + " min" +
+        (estado.bn ? " · <em>cámara en blanco y negro: solo cuenta el oscurecimiento</em>" : "") +
         (aprendiendo ? " · <em>formando el fondo</em>" : "") + (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "");
     } else {
       info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · rojizos " + r.rojizos + " · brillantes " + r.brillantes +
@@ -1042,7 +1061,7 @@ window.CAM_CONFIG = {
     if (!m) { indiceEl.innerHTML = "Índice: <strong>no disponible</strong>"; return; }
     estado.ultimoIndice = m.indice;
     const t = new Date(), c = m.ceniza, mc = c && c.mancha;
-    estado.muestras.push({ t: t.toISOString(), modo: m.modo, indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null,
+    estado.muestras.push({ t: t.toISOString(), modo: m.modo, lumCielo: estado.car ? +estado.car.lumCielo.toFixed(1) : null, bn: estado.bn ? 1 : 0, indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null,
       rojizos: m.rojizos, brillantes: m.brillantes, umbralBrillo: estado.ajustes.umbralBrillo,
       topeInc: m.mancha ? Math.round(m.mancha.topeM) : null, altoInc: m.mancha ? Math.round(m.mancha.altoM) : null,
       anchoInc: m.mancha ? Math.round(m.mancha.anchoM) : null,
@@ -1054,7 +1073,8 @@ window.CAM_CONFIG = {
     indiceEl.classList.toggle("alerta", alerta);
     indiceEl.innerHTML = "Incandescencia: <strong>" + m.indice.toFixed(2) + " %</strong>" +
       (c ? " · ceniza: <strong>" + c.indice.toFixed(2) + " %</strong>" : "") +
-      (m.lumCuadro != null ? " · luminancia del cuadro " + m.lumCuadro.toFixed(0) : "") + " · detector " + (m.modo === "ceniza" ? "de día" : "de noche");
+      (estado.car ? " · luminosidad del cielo " + estado.car.lumCielo.toFixed(0) + (estado.bn ? ", cámara en blanco y negro" : ", cámara en color") : "") +
+      " · detector " + (m.modo === "ceniza" ? "de día" : "de noche");
     dibujarGrafico();
   }
   function reprogramarMuestreo() {
@@ -1375,9 +1395,9 @@ window.CAM_CONFIG = {
     if (confirm("¿Borrar todo el registro de observaciones de este navegador?")) { estado.registro = []; guardar(LS.registro, []); renderRegistro(); }
   });
   $("btn-exp-muestras").addEventListener("click", () => {
-    descargarCsv("muestras_deteccion.csv", [["fecha_hora_local", "iso_utc", "detector", "indice_incand_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo",
+    descargarCsv("muestras_deteccion.csv", [["fecha_hora_local", "iso_utc", "detector", "lum_cielo", "camara_bn", "indice_incand_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo",
       "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "tope_columna_m", "alto_columna_m", "ancho_columna_m"]]
-      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.modo === "ceniza" ? "dia" : "noche", s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo,
+      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.modo === "ceniza" ? "dia" : "noche", s.lumCielo, s.bn, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo,
         s.topeInc, s.altoInc, s.anchoInc, s.indCen, s.calidos, s.oscuros, s.topeCol, s.altoCol, s.anchoCol])));
   });
   $("btn-borrar-muestras").addEventListener("click", () => {
