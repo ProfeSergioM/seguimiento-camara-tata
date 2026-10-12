@@ -61,9 +61,12 @@ ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
 ZONA_COLUMNA = {"x": 568, "y": 241, "w": 600, "h": 335}
 # Recorte para VIGIA-PlumeNet. El modelo trabaja en una grilla de 37 × 37
 # celdas sobre su entrada de 518 × 518 px; con el cuadro completo cada celda
-# cubre unos 52 × 29 px de la cámara. Un recorte alrededor del volcán afina
-# esa grilla (con este recorte, unos 24 × 14 px por celda).
-RECORTE_PN = {"x": 468, "y": 200, "w": 900, "h": 506}
+# cubre unos 52 × 29 px de la cámara. Con la emisión real del 12-10-2026 el
+# cuadro completo mezcló ceniza y gas, mientras que este recorte, que cubre
+# el cielo sobre el volcán y hacia la derecha, marcó la columna completa como
+# ceniza (unos 31 × 18 px por celda). Si el viento lleva la columna hacia la
+# izquierda, conviene ajustarlo con --pn-recorte.
+RECORTE_PN = {"x": 760, "y": 0, "w": 1160, "h": 653}
 UMBRAL_BRILLO = 200
 ANCHO_CENIZA = 300          # ancho de la zona de columna reducida, en píxeles
 # Día o noche según la luminosidad del cielo (40 % superior del cuadro), no
@@ -390,7 +393,8 @@ CABECERA = ["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_c
             "indice_incand_pct", "lum_roi", "incandescencia", "tope_incand_m", "alto_incand_m", "ancho_incand_m",
             "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "posible_emision", "edad_fondo_min",
             "tope_columna_m", "alto_columna_m", "ancho_columna_m",
-            "pn_ceniza_pct", "pn_gas_pct", "pn_tope_ceniza_m", "pn_tope_gas_m", "pn_confianza_media"]
+            "pn_ceniza_pct", "pn_gas_pct", "pn_tope_ceniza_m", "pn_tope_gas_m", "pn_confianza_media",
+            "pn_ceniza_sale_del_recorte", "pn_gas_sale_del_recorte"]
 
 
 def analizar_plumenet(modelo, im, f):
@@ -546,8 +550,14 @@ def main():
             if modelo_pn is not None:
                 pn_res = analizar_plumenet(modelo_pn, im, f)
                 tc, tg = pn_res["ceniza_medidas"], pn_res["gas_medidas"]
-                texto += f" · PlumeNet: ceniza {pn_res['ceniza_pct']:.1f} %" + (f" tope {tc['tope_m']:.0f} m" if tc else "")
-                texto += f", gas {pn_res['gas_pct']:.1f} %" + (f" tope {tg['tope_m']:.0f} m" if tg else "")
+                # Si la columna toca el borde del recorte, su tope real está más
+                # arriba o más lejos: se informa como cota mínima.
+                def tope(m):
+                    if not m:
+                        return ""
+                    return f" tope ≥ {m['tope_m']:.0f} m (sale del recorte)" if m["recortada"] else f" tope {m['tope_m']:.0f} m"
+                texto += f" · PlumeNet: ceniza {pn_res['ceniza_pct']:.1f} %" + tope(tc)
+                texto += f", gas {pn_res['gas_pct']:.1f} %" + tope(tg)
             anotar(im, f, texto, modo, mc if modo == "ceniza" else mi).save(salida / "cuadros_escala" / f"{nombre}.jpg", quality=90)
             if pn_res is not None and a.mascaras:
                 import plumenet as pn
@@ -566,8 +576,10 @@ def main():
                     fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"])] +
                     ([fmt(pn_res["ceniza_pct"], 2), fmt(pn_res["gas_pct"], 2),
                       fmt(pn_res["ceniza_medidas"] and pn_res["ceniza_medidas"]["tope_m"]),
-                      fmt(pn_res["gas_medidas"] and pn_res["gas_medidas"]["tope_m"]), fmt(pn_res["confianza"], 2)]
-                     if pn_res is not None else ["", "", "", "", ""]))
+                      fmt(pn_res["gas_medidas"] and pn_res["gas_medidas"]["tope_m"]), fmt(pn_res["confianza"], 2),
+                      "" if not pn_res["ceniza_medidas"] else int(pn_res["ceniza_medidas"]["recortada"]),
+                      "" if not pn_res["gas_medidas"] else int(pn_res["gas_medidas"]["recortada"])]
+                     if pn_res is not None else ["", "", "", "", "", "", ""]))
             print(f"{t:%H:%M:%S} {im.width}x{im.height} cielo={lum_cielo:.0f} color={colorido:.1f} → {texto.split(' · ', 2)[-1]}", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{t:%H:%M:%S} error: {e}", file=sys.stderr, flush=True)

@@ -164,15 +164,19 @@ python3 scripts/plumenet.py silueta --modelo VIGIAPlumeNet_traced_Dinov2_s14reg_
 python3 scripts/monitor.py --alias plazatata --intervalo 1 --plumenet VIGIAPlumeNet_traced_Dinov2_s14reg_6classes.pt --mascaras
 ```
 
-En el script de monitoreo, el modelo analiza un recorte alrededor del volcán (`--pn-recorte`) e informa el porcentaje de ceniza y de gas y el tope de cada columna que toca el cráter, en columnas del CSV que empiezan con `pn_`.
+En el script de monitoreo, el modelo analiza un recorte del cielo sobre el volcán (`--pn-recorte`) e informa el porcentaje de ceniza y de gas y el tope de cada columna que toca el cráter, en columnas del CSV que empiezan con `pn_`.
 
-Conviene tener presente la resolución. El modelo trabaja en una grilla de 37 × 37 celdas sobre su entrada de 518 × 518 px. Con el cuadro completo, cada celda cubre unos 52 × 29 px de la cámara, unos 95 × 55 m en el plano del cráter; con el recorte por defecto, unos 24 × 14 px. Por eso el modelo sirve para clasificar la emisión, ceniza o gas, más que para medir su borde. Para la silueta, el trazado por color del sitio es más preciso con cielo despejado.
+Conviene tener presente la resolución. El modelo trabaja en una grilla de 37 × 37 celdas sobre su entrada de 518 × 518 px. Con el cuadro completo, cada celda cubre unos 52 × 29 px de la cámara, unos 95 × 55 m en el plano del cráter; con el recorte por defecto, unos 31 × 18 px. Por eso el modelo sirve para clasificar la emisión, ceniza o gas, más que para medir su borde. Para la silueta, el trazado por color del sitio es más preciso con cielo despejado.
 
 Estado de las pruebas con el modelo real, sobre CPU, de 4 a 9 s por imagen:
 
 - Con las imágenes de ejemplo del repositorio original, la integración reproduce lo esperado. Por ejemplo, en Stromboli marca la columna de ceniza como columna eruptiva y las desgasificaciones blancas como gas.
 - Con un cuadro diurno de esta cámara sin emisión, el recorte alrededor del volcán no marcó emisiones. El cuadro completo marcó como gas un 2.6 % de nubes altas.
-- Una columna simulada, una franja café translúcida agregada a una foto real, no fue detectada. Esa simulación no tiene la textura de una columna real, así que la prueba no es concluyente. Falta probar con emisiones reales de esta cámara.
+- Una columna simulada, una franja café translúcida agregada a una foto real, no fue detectada. Esa simulación no tiene la textura de una columna real, así que la prueba no es concluyente.
+- Con una emisión real de esta cámara, del amanecer del 12-10-2026, el resultado dependió del encuadre. El cuadro completo dio 1.4 % de ceniza y 9.6 % de gas, con la columna partida entre ambas clases. El recorte amplio por defecto, de x 760 a 1920 y de y 0 a 653, marcó la columna completa como ceniza: 27 % del recorte y nada de gas.
+- En esa emisión la columna nace cerca de x = 1000 a 1070 e y = 525, fuera de la ROI del cráter por defecto, así que no se midió su tope hasta mover la ROI. La columna sale por el borde superior del recorte; en ese caso el script informa el tope como cota mínima («sale del recorte»), y lo marca en las columnas `pn_*_sale_del_recorte` del CSV.
+
+En la misma imagen, la columna es más cálida que el cielo vecino, con R − B entre −17 y −6 frente a −32 y −30, y más oscura, con luminancia entre 143 y 159 frente a 179 y 188. Las dos señales del detector de ceniza del sitio tienen la dirección esperada y superan sus umbrales por defecto, con poco margen en la base de la columna. Falta probar ese detector con una secuencia real, porque necesita un fondo formado antes de la emisión.
 
 ## Notas técnicas
 
