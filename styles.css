@@ -44,7 +44,9 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .segmentado .boton { border-radius: 0; margin-left: -1px; }
 .segmentado .boton:first-child { border-radius: var(--radio) 0 0 var(--radio); margin-left: 0; }
 .segmentado .boton:last-child { border-radius: 0 var(--radio) var(--radio) 0; }
-.lectura { font-size: clamp(14px, 1.1vw, 19px); margin: 0 auto; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+.lectura-grupo { display: flex; align-items: center; gap: 6px; margin: 0 auto; }
+.lectura-grupo [hidden] { display: none; }
+.lectura { font-size: clamp(14px, 1.1vw, 19px); text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .lectura strong { color: var(--acento-2); font-variant-numeric: tabular-nums; }
 .relojes { font-variant-numeric: tabular-nums; font-size: clamp(14px, 1.1vw, 19px); line-height: 1.25; text-align: right; color: var(--acento);
   text-shadow: 0 1px 2px #000; }
@@ -127,7 +129,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .inserto-info, .inserto-graf { width: calc(100vw - 48px); }
   .barra-sup { gap: 6px 8px; padding: 6px 8px 10px; }
   .titulo { width: 100%; }
-  .lectura { margin: 0; }
+  .lectura-grupo { margin: 0; }
   .boton { padding: 6px 9px; font-size: 0.85rem; }
   .relojes { margin-left: auto; font-size: 13px; }
 }

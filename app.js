@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 a";
+  const VERSION = "2026-10-12 b";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -663,6 +663,7 @@
   }
 
   function actualizarLectura() {
+    $("btn-borrar-medida").hidden = estado.marcadorY == null;
     if (estado.marcadorY == null) { lectura.innerHTML = "Altura: <strong>--</strong>"; return; }
     const h = alturaDesdeY(estado.marcadorY);
     lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre la cumbre";
@@ -876,6 +877,14 @@
   $("btn-marco").addEventListener("click", () => mostrarMarco(estado.ajustes.marco === false));
   $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));
 
+  function borrarMedida() {
+    if (estado.marcadorY == null) return false;
+    estado.marcadorY = null;
+    dibujarOverlay();
+    return true;
+  }
+  $("btn-borrar-medida").addEventListener("click", borrarMedida);
+
   // ---------- Barra superior, panel lateral y pantalla completa ----------
   document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
     estado.ajustes.modo = b.dataset.fuente;
@@ -915,7 +924,8 @@
   document.addEventListener("keydown", (ev) => {
     if (ev.target.closest("input, select, textarea") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const k = ev.key.toLowerCase();
-    if (k === "escape") abrirMenu(false);
+    if (k === "escape") { if (lateral.classList.contains("abierto")) abrirMenu(false); else borrarMedida(); }
+    else if (k === "delete" || k === "backspace") borrarMedida();
     else if (k === "v") fijarModoUi("ver");
     else if (k === "m") fijarModoUi("medir");
     else if (k === "c") fijarModoUi("calibrar");

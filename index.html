@@ -30,7 +30,10 @@
       <button class="boton" data-fuente="hls" title="Video en vivo">Video</button>
       <button class="boton" data-fuente="snapshot" title="Foto actualizada cada pocos segundos">Snapshot</button>
     </div>
-    <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+    <div class="lectura-grupo">
+      <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+      <button class="boton icono chico" id="btn-borrar-medida" hidden title="Borrar la medición (Supr o Esc)" aria-label="Borrar la medición">✕</button>
+    </div>
     <div class="grupo">
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
@@ -172,7 +175,7 @@
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Esc cerrar este panel.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
   </footer>
 </aside>
 

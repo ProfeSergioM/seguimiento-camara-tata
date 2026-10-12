@@ -54,13 +54,13 @@ La cámara ocupa toda la ventana. Encima de la imagen hay una barra con los cont
 
 - **Ver, Medir, Calibrar**: modos de interacción con la imagen.
 - **Video, Snapshot**: fuente de imagen. Queda marcada la que realmente se está mostrando, también cuando el video falla y el sitio pasa solo a snapshot.
-- **Altura**: lectura del marcador de medición, en metros sobre la cumbre.
+- **Altura**: lectura del marcador de medición, en metros sobre la cumbre. El botón ✕ junto a la lectura borra la línea de medición, igual que las teclas Supr o Esc.
 - **Registrar** y **Capturar PNG**: guardan la observación o descargan el cuadro con la escala.
 - **⛶**: pantalla completa. En ese modo la barra se oculta tras unos segundos sin mover el mouse.
 - **☰**: abre el panel lateral con la fuente, la calibración, el índice de incandescencia y el registro.
 - **Relojes**: hora local de Chile y hora UTC.
 
-Atajos de teclado: V ver, M medir, C calibrar, Z recuadro de detección, R marco, F pantalla completa y Esc para cerrar el panel lateral.
+Atajos de teclado: V ver, M medir, C calibrar, Z recuadro de detección, R marco, F pantalla completa, Supr para borrar la medición y Esc para cerrar el panel lateral o, si está cerrado, borrar la medición.
 
 Detalle de cada modo:
 

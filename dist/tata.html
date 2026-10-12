@@ -56,7 +56,9 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .segmentado .boton { border-radius: 0; margin-left: -1px; }
 .segmentado .boton:first-child { border-radius: var(--radio) 0 0 var(--radio); margin-left: 0; }
 .segmentado .boton:last-child { border-radius: 0 var(--radio) var(--radio) 0; }
-.lectura { font-size: clamp(14px, 1.1vw, 19px); margin: 0 auto; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+.lectura-grupo { display: flex; align-items: center; gap: 6px; margin: 0 auto; }
+.lectura-grupo [hidden] { display: none; }
+.lectura { font-size: clamp(14px, 1.1vw, 19px); text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .lectura strong { color: var(--acento-2); font-variant-numeric: tabular-nums; }
 .relojes { font-variant-numeric: tabular-nums; font-size: clamp(14px, 1.1vw, 19px); line-height: 1.25; text-align: right; color: var(--acento);
   text-shadow: 0 1px 2px #000; }
@@ -139,7 +141,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .inserto-info, .inserto-graf { width: calc(100vw - 48px); }
   .barra-sup { gap: 6px 8px; padding: 6px 8px 10px; }
   .titulo { width: 100%; }
-  .lectura { margin: 0; }
+  .lectura-grupo { margin: 0; }
   .boton { padding: 6px 9px; font-size: 0.85rem; }
   .relojes { margin-left: auto; font-size: 13px; }
 }
@@ -165,7 +167,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
       <button class="boton" data-fuente="hls" title="Video en vivo">Video</button>
       <button class="boton" data-fuente="snapshot" title="Foto actualizada cada pocos segundos">Snapshot</button>
     </div>
-    <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+    <div class="lectura-grupo">
+      <div class="lectura" id="lectura">Altura: <strong>--</strong></div>
+      <button class="boton icono chico" id="btn-borrar-medida" hidden title="Borrar la medición (Supr o Esc)" aria-label="Borrar la medición">✕</button>
+    </div>
     <div class="grupo">
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
@@ -307,7 +312,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Esc cerrar este panel.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Supr borrar la medición, Esc cerrar este panel o borrar la medición.</p>
   </footer>
 </aside>
 
@@ -385,7 +390,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 a";
+  const VERSION = "2026-10-12 b";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -1045,6 +1050,7 @@ window.CAM_CONFIG = {
   }
 
   function actualizarLectura() {
+    $("btn-borrar-medida").hidden = estado.marcadorY == null;
     if (estado.marcadorY == null) { lectura.innerHTML = "Altura: <strong>--</strong>"; return; }
     const h = alturaDesdeY(estado.marcadorY);
     lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre la cumbre";
@@ -1258,6 +1264,14 @@ window.CAM_CONFIG = {
   $("btn-marco").addEventListener("click", () => mostrarMarco(estado.ajustes.marco === false));
   $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));
 
+  function borrarMedida() {
+    if (estado.marcadorY == null) return false;
+    estado.marcadorY = null;
+    dibujarOverlay();
+    return true;
+  }
+  $("btn-borrar-medida").addEventListener("click", borrarMedida);
+
   // ---------- Barra superior, panel lateral y pantalla completa ----------
   document.querySelectorAll("[data-fuente]").forEach(b => b.addEventListener("click", () => {
     estado.ajustes.modo = b.dataset.fuente;
@@ -1297,7 +1311,8 @@ window.CAM_CONFIG = {
   document.addEventListener("keydown", (ev) => {
     if (ev.target.closest("input, select, textarea") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const k = ev.key.toLowerCase();
-    if (k === "escape") abrirMenu(false);
+    if (k === "escape") { if (lateral.classList.contains("abierto")) abrirMenu(false); else borrarMedida(); }
+    else if (k === "delete" || k === "backspace") borrarMedida();
     else if (k === "v") fijarModoUi("ver");
     else if (k === "m") fijarModoUi("medir");
     else if (k === "c") fijarModoUi("calibrar");
