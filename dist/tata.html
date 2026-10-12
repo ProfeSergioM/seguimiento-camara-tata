@@ -73,15 +73,17 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .inserto[hidden] { display: none; }
 .inserto.alerta { border-color: var(--peligro); box-shadow: 0 0 0 1px var(--peligro); }
 .inserto-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.85rem; }
-.inserto-vistas { display: flex; gap: 8px; }
+.inserto-vistas { display: flex; gap: 8px; align-items: flex-start; }
+.segmentado.mini { margin-left: auto; margin-right: 6px; }
+.segmentado.mini .boton.chico { margin-top: 0; }
+.subtitulo { margin: 6px 0 0; font-size: 0.85rem; color: var(--texto); }
 .inserto-info, .inserto-graf { width: calc(2 * clamp(140px, 13vw, 300px) + 12px); max-width: 100%; }
 .inserto figure { margin: 0; }
 .inserto-vistas canvas { display: block; width: clamp(140px, 13vw, 300px); height: auto; image-rendering: pixelated; border: 1px solid var(--borde);
   background: #111; }
 .inserto figcaption { font-size: 0.75rem; color: var(--texto-suave); margin-top: 3px; display: flex; align-items: center; gap: 4px; }
 .muestra { display: inline-block; width: 10px; height: 10px; border: 1px solid #000; }
-.muestra.rojizo { background: rgb(255, 212, 0); }
-.muestra.brillante { background: rgb(0, 229, 255); margin-left: 6px; }
+.muestra.segunda { margin-left: 6px; }
 .inserto-info { margin: 6px 0 0; font-size: 0.8rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
 .inserto-info strong { color: var(--acento-2); }
 .inserto.alerta .inserto-info strong { color: var(--peligro); }
@@ -187,7 +189,12 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
   <section class="inserto" id="inserto" aria-label="Zona de detección de incandescencia">
     <div class="inserto-cab">
-      <strong>Zona de detección</strong>
+      <strong id="inserto-titulo">Detección</strong>
+      <div class="grupo segmentado mini" role="group" aria-label="Detector">
+        <button class="boton chico" data-det="auto" title="Ceniza de día, incandescencia de noche, según la imagen">Auto</button>
+        <button class="boton chico" data-det="ceniza" title="Forzar la detección de ceniza">Ceniza</button>
+        <button class="boton chico" data-det="incand" title="Forzar la detección de incandescencia">Incandescencia</button>
+      </div>
       <button class="boton icono chico" id="btn-cerrar-inserto" aria-label="Ocultar recuadro" title="Ocultar (tecla Z)">✕</button>
     </div>
     <div class="inserto-vistas">
@@ -197,7 +204,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
       </figure>
       <figure>
         <canvas id="roi-mascara" aria-label="Píxeles detectados como incandescentes"></canvas>
-        <figcaption><span class="muestra rojizo"></span>rojizo <span class="muestra brillante"></span>brillante</figcaption>
+        <figcaption><span class="muestra" id="ley-1-m"></span><span id="ley-1">rojizo</span> <span class="muestra segunda" id="ley-2-m"></span><span id="ley-2">brillante</span></figcaption>
       </figure>
     </div>
     <p class="inserto-info" id="roi-info">Sin imagen</p>
@@ -207,7 +214,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
     </div>
     <div class="inserto-graf">
       <div class="inserto-graf-cab">
-        <span>Índice en el tiempo (%)</span>
+        <span id="graf-titulo">Índice en el tiempo (%)</span>
         <label class="fila chica"><input id="n-muestreo-ins" type="checkbox"> registrar</label>
       </div>
       <canvas id="grafico" class="grafico" aria-label="Índice de incandescencia en el tiempo"></canvas>
@@ -254,6 +261,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
         <label>Píxeles por 100 m <input id="cal-px" type="number" step="0.1"></label>
         <label>Altura máxima (m) <input id="cal-max" type="number" step="100"></label>
         <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="808, 525, 120, 68"></label>
+        <label>Zona de columna para ceniza x, y, ancho, alto (px ref) <input id="cal-zona" placeholder="568, 241, 600, 335"></label>
         <div class="acciones">
           <button class="boton primario" id="btn-cal-aplicar">Aplicar</button>
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
@@ -263,7 +271,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
     </details>
 
     <details class="panel">
-      <summary>Noche e incandescencia</summary>
+      <summary>Detección de incandescencia y ceniza</summary>
       <div class="campos">
         <label>Brillo <input id="n-brillo" type="range" min="0.5" max="4" step="0.1" value="1"></label>
         <label>Contraste <input id="n-contraste" type="range" min="0.5" max="3" step="0.1" value="1"></label>
@@ -271,16 +279,26 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
           <button class="boton" id="btn-noche">Preset noche</button>
           <button class="boton" id="btn-dia">Sin realce</button>
         </div>
-        <label class="fila"><input id="n-muestreo" type="checkbox"> Muestrear índice de incandescencia automáticamente</label>
+        <label class="fila"><input id="n-muestreo" type="checkbox"> Registrar los índices automáticamente</label>
         <label>Intervalo de muestreo (s) <input id="n-int" type="number" min="2" step="1"></label>
+        <h3 class="subtitulo">Incandescencia (noche)</h3>
         <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
         <label>Umbral de brillo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
+        <h3 class="subtitulo">Ceniza (día)</h3>
+        <label>Umbral de alerta (%) <input id="c-umbral" type="number" min="0" step="0.5"></label>
+        <label>Umbral de calidez: aumento de R − B sobre el fondo <input id="c-calidez" type="number" min="1" step="1"></label>
+        <label>Umbral de oscurecimiento: baja de luminancia bajo el fondo <input id="c-oscuro" type="number" min="1" step="1"></label>
+        <div class="acciones">
+          <button class="boton" id="btn-fondo" title="Volver a formar el fondo con la imagen actual">Reiniciar fondo</button>
+        </div>
         <div class="indice" id="indice">Índice: <strong>--</strong></div>
         <div class="acciones">
           <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
           <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
         </div>
-        <p class="nota">El índice es el porcentaje de píxeles rojizos o brillantes dentro de la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el criterio de brillo. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
+        <p class="nota">Incandescencia: porcentaje de píxeles rojizos o brillantes en la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el brillo.</p>
+        <p class="nota">Ceniza: porcentaje de píxeles de la zona de columna que se volvieron más cálidos o más oscuros que su propio fondo, un promedio lento de los últimos minutos. La columna es la mancha más grande que toca la ROI del cráter. El fondo se forma al abrir el sitio; si en ese momento ya hay una emisión, use Reiniciar fondo con el cielo despejado.</p>
+        <p class="nota">Ambos índices requieren que el servidor permita leer los píxeles (CORS).</p>
       </div>
     </details>
 
@@ -303,7 +321,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
         </div>
         <div class="tabla-env">
           <table id="tabla">
-            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Índice (%)</th><th>Tope inc. (m)</th><th>Alto inc. (m)</th><th>Ancho inc. (m)</th><th>Nota</th><th></th></tr></thead>
+            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Incand. (%)</th><th>Tope inc. (m)</th><th>Alto inc. (m)</th><th>Ancho inc. (m)</th><th>Ceniza (%)</th><th>Nota</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -372,7 +390,17 @@ window.CAM_CONFIG = {
   // criterio que detecta la incandescencia. Valor provisional.
   umbralBrillo: 200,
 
-  // Segundos entre muestras del índice de incandescencia.
+  // Detección de ceniza (de día). Zona de columna sobre el cráter, en
+  // píxeles de referencia, y umbrales provisionales:
+  //   umbralCeniza  : % de píxeles de la zona para marcar posible emisión
+  //   umbralCalidez : aumento mínimo de R − B de un píxel sobre su fondo
+  //   umbralOscuro  : baja mínima de luminancia de un píxel bajo su fondo
+  zonaColumna: { x: 568, y: 241, w: 600, h: 335 },
+  umbralCeniza: 1,
+  umbralCalidez: 12,
+  umbralOscuro: 25,
+
+  // Segundos entre muestras de los índices.
   intervaloMuestreo: 10,
 
   // Relación de aspecto a usar cuando no se conoce el tamaño del video
@@ -390,12 +418,13 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 b";
+  const VERSION = "2026-10-12 c";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
     calib: "tata.calib.v2",
     roi: "tata.roi.v2",
+    zonaCol: "tata.zonacol.v1",
     registro: "tata.registro",
     muestras: "tata.muestras"
   };
@@ -413,12 +442,18 @@ window.CAM_CONFIG = {
       intervaloMuestreo: CFG.intervaloMuestreo || 10,
       umbral: CFG.umbralIncandescencia != null ? CFG.umbralIncandescencia : 2,
       umbralBrillo: CFG.umbralBrillo != null ? CFG.umbralBrillo : 200,
+      detector: "auto",
+      umbralCeniza: CFG.umbralCeniza != null ? CFG.umbralCeniza : 1,
+      umbralCalidez: CFG.umbralCalidez != null ? CFG.umbralCalidez : 12,
+      umbralOscuro: CFG.umbralOscuro != null ? CFG.umbralOscuro : 25,
       muestreo: false,
       brillo: 1,
       contraste: 1
     }, leer(LS.ajustes, {})),
     calib: Object.assign({}, CFG.calibracion || { x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 }, leer(LS.calib, {})),
     roi: Object.assign({}, CFG.roi || { x: 808, y: 525, w: 120, h: 68 }, leer(LS.roi, {})),
+    zonaCol: Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 }, leer(LS.zonaCol, {})),
+    modoDet: "incand",        // detector en uso: "incand" (noche) o "ceniza" (día)
     registro: leer(LS.registro, []),
     muestras: leer(LS.muestras, []),
     modoUi: "ver",
@@ -579,27 +614,38 @@ window.CAM_CONFIG = {
     setEstado("Reproductor oficial (iframe). Se puede medir con la escala; no hay análisis de píxeles.");
   }
 
+  // Cada foto nueva se carga en un elemento aparte y reemplaza a la
+  // anterior solo cuando llegó completa. Si se reutilizara el mismo
+  // elemento, mientras llega la foto nueva quedaría sin tamaño y el
+  // análisis de ese instante no tendría imagen.
   function conectarSnapshot() {
-    const img = document.createElement("img");
-    img.alt = "Cámara Plaza Tata";
+    const conexion = estado.conexion;
     let conCors = true;
-    img.crossOrigin = "anonymous";
-    img.referrerPolicy = "no-referrer";
-    const cargar = () => { img.src = urlSnapshot() + (urlSnapshot().includes("?") ? "&" : "?") + "_=" + Date.now(); };
-    img.addEventListener("load", () => {
-      fijarAspecto(img.naturalWidth, img.naturalHeight);
-      estado.ultimoCuadro = new Date();
-      if (estado.pixelesOk === null) probarPixeles();
-      actualizarInserto();
-      setEstado((estado.mensajeRespaldo ? estado.mensajeRespaldo + " · " : "") + "Snapshot " + img.naturalWidth + "×" + img.naturalHeight + " · último cuadro " + horaLocal(estado.ultimoCuadro) +
-        (estado.pixelesOk ? " · análisis de píxeles disponible" : " · sin acceso a píxeles (CORS)"));
-    });
-    img.addEventListener("error", () => {
-      if (conCors) { conCors = false; img.removeAttribute("crossorigin"); estado.pixelesOk = false; cargar(); }
-      else setEstado("No se pudo cargar el snapshot. Verifique el alias o la URL.");
-    });
-    medios.appendChild(img);
-    estado.media = img; estado.tipoMedia = "img";
+    estado.tipoMedia = "img";
+    const cargar = () => {
+      const img = document.createElement("img");
+      img.alt = "Cámara Plaza Tata";
+      if (conCors) img.crossOrigin = "anonymous";
+      img.referrerPolicy = "no-referrer";
+      img.addEventListener("load", () => {
+        if (conexion !== estado.conexion) return;
+        const previo = estado.media;
+        if (previo && previo.parentNode === medios) medios.replaceChild(img, previo); else medios.appendChild(img);
+        estado.media = img; estado.tipoMedia = "img";
+        fijarAspecto(img.naturalWidth, img.naturalHeight);
+        estado.ultimoCuadro = new Date();
+        if (estado.pixelesOk === null) probarPixeles();
+        actualizarInserto();
+        setEstado((estado.mensajeRespaldo ? estado.mensajeRespaldo + " · " : "") + "Snapshot " + img.naturalWidth + "×" + img.naturalHeight + " · último cuadro " + horaLocal(estado.ultimoCuadro) +
+          (estado.pixelesOk ? " · análisis de píxeles disponible" : " · sin acceso a píxeles (CORS)"));
+      });
+      img.addEventListener("error", () => {
+        if (conexion !== estado.conexion) return;
+        if (conCors) { conCors = false; estado.pixelesOk = false; cargar(); }
+        else setEstado("No se pudo cargar el snapshot. Verifique el alias o la URL.");
+      });
+      img.src = urlSnapshot() + (urlSnapshot().includes("?") ? "&" : "?") + "_=" + Date.now();
+    };
     cargar();
     estado.timerSnap = setInterval(cargar, Math.max(2, estado.ajustes.intervaloSnapshot) * 1000);
   }
@@ -684,7 +730,107 @@ window.CAM_CONFIG = {
     if (!estado.pixelesOk) setEstado(estadoEl.textContent + " · sin acceso a píxeles (CORS)");
   }
 
-  // Clasificación de un píxel de la ROI:
+  // ---------- Manchas conectadas ----------
+  // Mancha conectada más grande (vecindad de 8) entre los píxeles
+  // detectados. Se ignoran manchas de menos de MIN_PX_MANCHA píxeles,
+  // que suelen ser ruido. Si se indica una caja, solo cuentan las manchas
+  // que la tocan: una columna de ceniza debe nacer en el cráter.
+  const MIN_PX_MANCHA = 6;
+  function manchaMayor(clases, w, h, caja) {
+    const visto = new Uint8Array(clases.length), cola = new Int32Array(clases.length);
+    let mejor = null;
+    for (let p0 = 0; p0 < clases.length; p0++) {
+      if (!clases[p0] || visto[p0]) continue;
+      let ini = 0, fin = 0, n = 0, top = h, bot = -1, izq = w, der = -1, toca = !caja;
+      cola[fin++] = p0; visto[p0] = 1;
+      while (ini < fin) {
+        const p = cola[ini++], x = p % w, y = (p - x) / w;
+        n++;
+        if (y < top) top = y; if (y > bot) bot = y; if (x < izq) izq = x; if (x > der) der = x;
+        if (!toca && x >= caja.x0 && x <= caja.x1 && y >= caja.y0 && y <= caja.y1) toca = true;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const q = yy * w + xx;
+          if (clases[q] && !visto[q]) { visto[q] = 1; cola[fin++] = q; }
+        }
+      }
+      if (toca && (!mejor || n > mejor.n)) mejor = { n, top, bot, izq, der };
+    }
+    return mejor && mejor.n >= MIN_PX_MANCHA ? mejor : null;
+  }
+
+  // Convierte una mancha de la máscara a coordenadas de referencia y a
+  // metros con la calibración: tope sobre la cumbre, alto y ancho. En el
+  // plano del cráter un píxel cubre la misma distancia en horizontal y en
+  // vertical. `mapa` lleva un píxel de la máscara al cuadro real.
+  function medirEnMetros(m, mapa, wm, hm) {
+    const { ox, oy, sx, sy, f } = mapa;
+    const topRef = (oy + m.top * sy) / f, botRef = (oy + (m.bot + 1) * sy) / f;
+    const izqRef = (ox + m.izq * sx) / f, derRef = (ox + (m.der + 1) * sx) / f;
+    const mPorPx = 100 / estado.calib.pxPor100m;
+    return {
+      px: m.n, topRef, botRef, izqRef, derRef,
+      topeM: alturaDesdeY(topRef), baseM: alturaDesdeY(botRef),
+      altoM: (botRef - topRef) * mPorPx, anchoM: (derRef - izqRef) * mPorPx,
+      // La mancha toca el borde de la zona analizada: puede estar recortada.
+      recortada: m.top === 0 || m.izq === 0 || m.bot === hm - 1 || m.der === wm - 1
+    };
+  }
+
+  // Rectángulo (en píxeles de referencia) llevado al cuadro real.
+  function rectEnCuadro(r) {
+    const m = estado.media;
+    if (!m || estado.tipoMedia === "iframe") return null;
+    const W = estado.tipoMedia === "video" ? m.videoWidth : m.naturalWidth;
+    const H = estado.tipoMedia === "video" ? m.videoHeight : m.naturalHeight;
+    if (!W || !H) return null;
+    const f = W / REF_W;
+    const x = Math.max(0, Math.round(r.x * f)), y = Math.max(0, Math.round(r.y * f));
+    const w = Math.min(W - x, Math.round(r.w * f)), h = Math.min(H - y, Math.round(r.h * f));
+    return w > 0 && h > 0 ? { m, W, H, x, y, w, h, f } : null;
+  }
+  function roiEnCuadro() { return rectEnCuadro(estado.roi); }
+
+  // Lienzos pequeños reutilizables: se copia solo la zona analizada o una
+  // versión reducida del cuadro, en vez de leer el cuadro completo.
+  const lienzoRoi = document.createElement("canvas");
+  const lienzoMini = document.createElement("canvas");
+  const lienzoCen = document.createElement("canvas");
+  function leerRect(lienzo, z, w, h) {
+    lienzo.width = w; lienzo.height = h;
+    const ctx = lienzo.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(z.m, z.x, z.y, z.w, z.h, 0, 0, w, h);
+    return ctx.getImageData(0, 0, w, h);
+  }
+
+  // Luminancia media y colorido del cuadro, sobre una copia reducida. El
+  // colorido es casi cero cuando la cámara pasa a blanco y negro de noche.
+  function caracterizarCuadro() {
+    if (!estado.pixelesOk) return null;
+    const z = rectEnCuadro({ x: 0, y: 0, w: REF_W, h: refH() });
+    if (!z) return null;
+    try {
+      const w = 160, h = Math.max(1, Math.round(160 * z.H / z.W));
+      lienzoMini.width = w; lienzoMini.height = h;
+      const ctx = lienzoMini.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(z.m, 0, 0, w, h);
+      const d = ctx.getImageData(0, 0, w, h).data;
+      let s = 0, c = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        c += (Math.abs(d[i] - d[i + 1]) + Math.abs(d[i + 1] - d[i + 2]) + Math.abs(d[i + 2] - d[i])) / 3;
+      }
+      const n = d.length / 4;
+      return { lum: s / n, color: c / n };
+    } catch (e) { return null; }
+  }
+  // De día: imagen en color y luminosa. Si no, se usa el detector nocturno.
+  const COLOR_MIN_DIA = 4, LUM_MIN_DIA = 45;
+  function esDeDia(car) { return !!car && car.color >= COLOR_MIN_DIA && car.lum >= LUM_MIN_DIA; }
+
+  // ---------- Incandescencia (noche) ----------
+  // Clasificación de un píxel de la ROI del cráter:
   //   1 rojizo    : brillante y con dominante roja (resplandor anaranjado).
   //                 Solo puede ocurrir cuando la cámara transmite en color.
   //   2 brillante : luminancia sobre el umbral de brillo. De noche la cámara
@@ -696,84 +842,12 @@ window.CAM_CONFIG = {
     if (0.299 * R + 0.587 * G + 0.114 * B >= umbralBrillo) return 2;
     return 0;
   }
-
-  // Mancha conectada más grande (vecindad de 8) entre los píxeles
-  // detectados. Se ignoran manchas de menos de MIN_PX_MANCHA píxeles,
-  // que suelen ser ruido del sensor.
-  const MIN_PX_MANCHA = 6;
-  function manchaMayor(clases, w, h) {
-    const visto = new Uint8Array(clases.length), cola = new Int32Array(clases.length);
-    let mejor = null;
-    for (let p0 = 0; p0 < clases.length; p0++) {
-      if (!clases[p0] || visto[p0]) continue;
-      let ini = 0, fin = 0, n = 0, top = h, bot = -1, izq = w, der = -1;
-      cola[fin++] = p0; visto[p0] = 1;
-      while (ini < fin) {
-        const p = cola[ini++], x = p % w, y = (p - x) / w;
-        n++;
-        if (y < top) top = y; if (y > bot) bot = y; if (x < izq) izq = x; if (x > der) der = x;
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-          const xx = x + dx, yy = y + dy;
-          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
-          const q = yy * w + xx;
-          if (clases[q] && !visto[q]) { visto[q] = 1; cola[fin++] = q; }
-        }
-      }
-      if (!mejor || n > mejor.n) mejor = { n, top, bot, izq, der };
-    }
-    return mejor && mejor.n >= MIN_PX_MANCHA ? mejor : null;
-  }
-
-  // Convierte la mancha a coordenadas de referencia y a metros con la
-  // calibración: tope sobre la cumbre, alto y ancho. En el plano del cráter
-  // un píxel cubre la misma distancia en horizontal y en vertical.
-  function medirMancha(r) {
-    const m = manchaMayor(r.clases, r.z.w, r.z.h);
-    if (!m) return null;
-    const f = r.z.W / REF_W, c = estado.calib;
-    const ref = (v) => v / f;
-    const topRef = ref(r.z.y + m.top), botRef = ref(r.z.y + m.bot + 1);
-    const izqRef = ref(r.z.x + m.izq), derRef = ref(r.z.x + m.der + 1);
-    const mPorPx = 100 / c.pxPor100m;
-    return {
-      px: m.n, topRef, botRef, izqRef, derRef,
-      topeM: alturaDesdeY(topRef), baseM: alturaDesdeY(botRef),
-      altoM: (botRef - topRef) * mPorPx, anchoM: (derRef - izqRef) * mPorPx,
-      // La mancha toca el borde de la ROI: puede estar recortada.
-      recortada: m.top === 0 || m.izq === 0 || m.bot === r.z.h - 1 || m.der === r.z.w - 1
-    };
-  }
-
-  // Rectángulo de la ROI en píxeles del cuadro real.
-  function roiEnCuadro() {
-    const m = estado.media;
-    if (!m || estado.tipoMedia === "iframe") return null;
-    const W = estado.tipoMedia === "video" ? m.videoWidth : m.naturalWidth;
-    const H = estado.tipoMedia === "video" ? m.videoHeight : m.naturalHeight;
-    if (!W || !H) return null;
-    const f = W / REF_W, r = estado.roi;
-    const x = Math.max(0, Math.round(r.x * f)), y = Math.max(0, Math.round(r.y * f));
-    const w = Math.min(W - x, Math.round(r.w * f)), h = Math.min(H - y, Math.round(r.h * f));
-    return w > 0 && h > 0 ? { m, W, H, x, y, w, h } : null;
-  }
-
-  // Lienzos pequeños reutilizables: solo se copia la ROI y una versión
-  // reducida del cuadro, en vez de leer el cuadro completo.
-  const lienzoRoi = document.createElement("canvas");
-  const lienzoMini = document.createElement("canvas");
-  function leerRoi(z) {
-    lienzoRoi.width = z.w; lienzoRoi.height = z.h;
-    const ctx = lienzoRoi.getContext("2d", { willReadFrequently: true });
-    ctx.drawImage(z.m, z.x, z.y, z.w, z.h, 0, 0, z.w, z.h);
-    return ctx.getImageData(0, 0, z.w, z.h);
-  }
-
   function analizarRoi() {
     if (!estado.pixelesOk) return null;
     const z = roiEnCuadro();
     if (!z) return null;
     let img;
-    try { img = leerRoi(z); } catch (e) { estado.pixelesOk = false; return null; }
+    try { img = leerRect(lienzoRoi, z, z.w, z.h); } catch (e) { estado.pixelesOk = false; return null; }
     const d = img.data, n = d.length / 4;
     const clases = new Uint8Array(n);
     const ub = estado.ajustes.umbralBrillo;
@@ -785,29 +859,92 @@ window.CAM_CONFIG = {
       clases[p] = c;
       if (c === 1) rojizos++; else if (c === 2) brillantes++;
     }
-    const r = { z, img, clases, n, rojizos, brillantes, indice: 100 * (rojizos + brillantes) / n, lumRoi: lum / n };
-    r.mancha = medirMancha(r);
-    return r;
+    const m = manchaMayor(clases, z.w, z.h);
+    return { z, img, clases, n, wm: z.w, hm: z.h, rojizos, brillantes, indice: 100 * (rojizos + brillantes) / n, lumRoi: lum / n,
+      mancha: m ? medirEnMetros(m, { ox: z.x, oy: z.y, sx: 1, sy: 1, f: z.f }, z.w, z.h) : null };
   }
 
-  // Luminancia media del cuadro, sobre una copia reducida, para distinguir noche de día.
-  function luminanciaCuadro(z) {
-    try {
-      const w = 160, h = Math.max(1, Math.round(160 * z.H / z.W));
-      lienzoMini.width = w; lienzoMini.height = h;
-      const ctx = lienzoMini.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(z.m, 0, 0, w, h);
-      const d = ctx.getImageData(0, 0, w, h).data;
-      let s = 0;
-      for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      return s / (d.length / 4);
-    } catch (e) { return null; }
+  // ---------- Ceniza (día) ----------
+  // Se analiza la zona de columna sobre el cráter, reducida a ANCHO_CENIZA
+  // píxeles de ancho. Cada píxel se compara con un fondo propio: un
+  // promedio lento (constante de tiempo TAU_FONDO_S) de cómo se ha visto
+  // ese mismo píxel. Así el terreno, la nieve y el cielo quieto se
+  // cancelan, y solo quedan los cambios. A cada diferencia se le resta la
+  // mediana de la zona, para que un cambio general de luz o de balance de
+  // color no active la detección. Clases:
+  //   1 más cálido : aumentó R − B respecto del fondo (tono gris café).
+  //   2 más oscuro : bajó la luminancia respecto del fondo.
+  // Los píxeles detectados actualizan su fondo diez veces más lento, para
+  // que una emisión sostenida no se absorba de inmediato.
+  const ANCHO_CENIZA = 300, TAU_FONDO_S = 600;
+  let fondo = null;
+  function reiniciarFondo() { fondo = null; }
+  function mediana(arr) {
+    const paso = Math.max(1, Math.floor(arr.length / 4000)), m = [];
+    for (let i = 0; i < arr.length; i += paso) m.push(arr[i]);
+    m.sort((a, b) => a - b);
+    return m[m.length >> 1];
+  }
+  function analizarCeniza() {
+    if (!estado.pixelesOk) return null;
+    const z = rectEnCuadro(estado.zonaCol);
+    if (!z) return null;
+    const wm = Math.min(ANCHO_CENIZA, z.w), hm = Math.max(1, Math.round(z.h * wm / z.w));
+    let img;
+    try { img = leerRect(lienzoCen, z, wm, hm); } catch (e) { estado.pixelesOk = false; return null; }
+    const d = img.data, n = wm * hm;
+    const rb = new Float32Array(n), l = new Float32Array(n);
+    for (let i = 0, p = 0; p < n; i += 4, p++) { rb[p] = d[i] - d[i + 2]; l[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; }
+    const ahora = Date.now(), clave = [z.x, z.y, z.w, z.h, wm, hm].join(",");
+    const clases = new Uint8Array(n);
+    const base = { z, img, clases, n, wm, hm, calidos: 0, oscuros: 0, indice: 0, mancha: null };
+    if (!fondo || fondo.clave !== clave) {
+      fondo = { clave, rb: rb.slice(), l: l.slice(), t: ahora, t0: ahora };
+      return Object.assign(base, { edadFondo: 0 });
+    }
+    const drb = new Float32Array(n), dl = new Float32Array(n);
+    for (let p = 0; p < n; p++) { drb[p] = rb[p] - fondo.rb[p]; dl[p] = l[p] - fondo.l[p]; }
+    const mRB = mediana(drb), mL = mediana(dl);
+    const uc = estado.ajustes.umbralCalidez, uo = estado.ajustes.umbralOscuro;
+    let calidos = 0, oscuros = 0;
+    for (let p = 0; p < n; p++) {
+      const L = l[p];
+      if (L >= 35 && L <= 235 && drb[p] - mRB >= uc) { clases[p] = 1; calidos++; }
+      else if (L >= 15 && dl[p] - mL <= -uo) { clases[p] = 2; oscuros++; }
+    }
+    const dt = Math.min(60, (ahora - fondo.t) / 1000); fondo.t = ahora;
+    const a = 1 - Math.exp(-dt / TAU_FONDO_S), a2 = a / 10;
+    for (let p = 0; p < n; p++) {
+      const k = clases[p] ? a2 : a;
+      fondo.rb[p] += k * (rb[p] - fondo.rb[p]); fondo.l[p] += k * (l[p] - fondo.l[p]);
+    }
+    // Caja del cráter (la ROI de incandescencia) en píxeles de la máscara.
+    const sx = z.w / wm, sy = z.h / hm, r = estado.roi;
+    const caja = { x0: (r.x * z.f - z.x) / sx, x1: ((r.x + r.w) * z.f - z.x) / sx, y0: (r.y * z.f - z.y) / sy, y1: ((r.y + r.h) * z.f - z.y) / sy };
+    const m = manchaMayor(clases, wm, hm, caja);
+    return Object.assign(base, { calidos, oscuros, indice: 100 * (calidos + oscuros) / n, edadFondo: (ahora - fondo.t0) / 1000,
+      mancha: m ? medirEnMetros(m, { ox: z.x, oy: z.y, sx, sy, f: z.f }, wm, hm) : null });
   }
 
-  function calcularIndice() {
-    const a = analizarRoi();
-    if (!a) return null;
-    return { indice: a.indice, lumRoi: a.lumRoi, lumCuadro: luminanciaCuadro(a.z), rojizos: a.rojizos, brillantes: a.brillantes, mancha: a.mancha };
+  // ---------- Análisis periódico ----------
+  // Cada segundo: se caracteriza el cuadro, se elige el detector y se
+  // analizan la ROI del cráter y, si la imagen está en color, la zona de
+  // columna (para mantener su fondo al día aunque no se muestre).
+  function detectorActivo() {
+    const d = estado.ajustes.detector;
+    if (d === "ceniza" || d === "incand") return d;
+    return esDeDia(estado.car) ? "ceniza" : "incand";
+  }
+  function analizar() {
+    estado.car = caracterizarCuadro();
+    estado.modoDet = detectorActivo();
+    estado.anInc = analizarRoi();
+    estado.anCen = (estado.modoDet === "ceniza" || esDeDia(estado.car)) ? analizarCeniza() : null;
+    if (estado.anCen === null && estado.car && !esDeDia(estado.car)) reiniciarFondo();
+  }
+  function actualizarInserto() {
+    analizar();
+    renderInserto();
   }
 
   function limpiarMancha() {
@@ -816,49 +953,74 @@ window.CAM_CONFIG = {
     $("btn-usar-tope").disabled = true;
   }
 
-  // ---------- Recuadro de la ROI: ampliación y máscara ----------
-  const COLOR_ROJIZO = [255, 212, 0];     // amarillo: clase 1
-  const COLOR_BRILLANTE = [0, 229, 255];  // cian: clase 2
-  function actualizarInserto() {
+  // ---------- Recuadro: ampliación, máscara y medidas ----------
+  const COLORES = {
+    incand: { 1: [255, 212, 0], 2: [0, 229, 255] },     // amarillo rojizo, cian brillante
+    ceniza: { 1: [214, 140, 60], 2: [179, 136, 255] }   // café más cálido, lila más oscuro
+  };
+  const COLOR_GUIA = { incand: "rgb(0,229,255)", ceniza: "rgb(232,170,90)" };
+  function renderInserto() {
+    const modo = estado.modoDet || "incand";
+    document.querySelectorAll("[data-det]").forEach(b => b.classList.toggle("activo", b.dataset.det === (estado.ajustes.detector || "auto")));
+    $("inserto-titulo").textContent = modo === "ceniza" ? "Detección de ceniza" : "Detección de incandescencia";
+    $("ley-1").textContent = modo === "ceniza" ? "más cálido" : "rojizo";
+    $("ley-2").textContent = modo === "ceniza" ? "más oscuro" : "brillante";
+    $("ley-1-m").style.background = "rgb(" + COLORES[modo][1].join(",") + ")";
+    $("ley-2-m").style.background = "rgb(" + COLORES[modo][2].join(",") + ")";
+    $("graf-titulo").textContent = (modo === "ceniza" ? "Índice de ceniza" : "Índice de incandescencia") + " en el tiempo (%)";
+    if (estado.modoGraf !== modo) { estado.modoGraf = modo; dibujarGrafico(); }
     const caja = $("inserto");
-    if (caja.hidden) return;
     const zoom = $("roi-zoom"), mascara = $("roi-mascara"), info = $("roi-info");
-    const z = roiEnCuadro();
-    if (!z) { info.textContent = estado.tipoMedia === "iframe" ? "No disponible en modo iframe" : "Sin imagen"; limpiarMancha(); return; }
+    const zr = modo === "ceniza" ? rectEnCuadro(estado.zonaCol) : roiEnCuadro();
+    if (!zr) { info.textContent = estado.tipoMedia === "iframe" ? "No disponible en modo iframe" : "Sin imagen"; limpiarMancha(); return; }
+    const r = modo === "ceniza" ? estado.anCen : estado.anInc;
+    const wm = r ? r.wm : (modo === "ceniza" ? Math.min(ANCHO_CENIZA, zr.w) : zr.w);
+    const hm = r ? r.hm : Math.max(1, Math.round(zr.h * wm / zr.w));
+    if (caja.hidden) { fijarMancha(r, modo); return; }
     // Ampliación: se dibuja aunque no haya acceso a píxeles.
-    for (const cv of [zoom, mascara]) { cv.width = z.w; cv.height = z.h; }
+    for (const cv of [zoom, mascara]) { cv.width = wm; cv.height = hm; }
     const cz = zoom.getContext("2d");
     const a = estado.ajustes;
     cz.filter = (a.brillo !== 1 || a.contraste !== 1) ? "brightness(" + a.brillo + ") contrast(" + a.contraste + ")" : "none";
-    cz.drawImage(z.m, z.x, z.y, z.w, z.h, 0, 0, z.w, z.h);
+    cz.drawImage(zr.m, zr.x, zr.y, zr.w, zr.h, 0, 0, wm, hm);
     const cm = mascara.getContext("2d");
-    const r = analizarRoi();
     if (!r) {
-      cm.fillStyle = "#111"; cm.fillRect(0, 0, z.w, z.h);
+      cm.fillStyle = "#111"; cm.fillRect(0, 0, wm, hm);
       info.textContent = "Máscara no disponible: sin acceso a píxeles (CORS)";
       limpiarMancha();
       return;
     }
     // Máscara: fondo en gris atenuado y píxeles detectados en color.
-    const out = cm.createImageData(z.w, z.h), d = r.img.data, o = out.data;
+    const out = cm.createImageData(wm, hm), d = r.img.data, o = out.data, col = COLORES[modo];
     for (let i = 0, p = 0; p < r.n; i += 4, p++) {
       const c = r.clases[p];
-      if (c === 1) { o[i] = COLOR_ROJIZO[0]; o[i + 1] = COLOR_ROJIZO[1]; o[i + 2] = COLOR_ROJIZO[2]; }
-      else if (c === 2) { o[i] = COLOR_BRILLANTE[0]; o[i + 1] = COLOR_BRILLANTE[1]; o[i + 2] = COLOR_BRILLANTE[2]; }
+      if (c) { o[i] = col[c][0]; o[i + 1] = col[c][1]; o[i + 2] = col[c][2]; }
       else { const g = 0.4 * (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]); o[i] = o[i + 1] = o[i + 2] = g; }
       o[i + 3] = 255;
     }
     cm.putImageData(out, 0, 0);
-    const alerta = r.indice >= estado.ajustes.umbral;
+    const umbral = modo === "ceniza" ? a.umbralCeniza : a.umbral;
+    const alerta = r.indice >= umbral;
     caja.classList.toggle("alerta", alerta);
-    info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · rojizos " + r.rojizos + " · brillantes " + r.brillantes +
-      " de " + r.n + " px" + (alerta ? " · <strong>INCANDESCENCIA</strong>" : "");
-    const mm = r.mancha;
-    estado.mancha = mm ? Object.assign({ t: Date.now() }, mm) : null;
+    if (modo === "ceniza") {
+      const aprendiendo = r.edadFondo < 60;
+      info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · más cálidos " + r.calidos + " · más oscuros " + r.oscuros +
+        " de " + r.n + " px · fondo de " + Math.round(r.edadFondo / 60) + " min" +
+        (aprendiendo ? " · <em>formando el fondo</em>" : "") + (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "");
+    } else {
+      info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · rojizos " + r.rojizos + " · brillantes " + r.brillantes +
+        " de " + r.n + " px" + (alerta ? " · <strong>INCANDESCENCIA</strong>" : "");
+    }
+    fijarMancha(r, modo);
+  }
+  function fijarMancha(r, modo) {
+    const mm = r && r.mancha;
+    estado.mancha = mm ? Object.assign({ t: Date.now(), modo }, mm) : null;
+    const nombre = modo === "ceniza" ? "Columna" : "Mancha principal";
     $("roi-mancha").innerHTML = mm
-      ? "Mancha principal: tope <strong>" + fmtM(mm.topeM) + "</strong> sobre la cumbre · alto <strong>" + fmtM(mm.altoM) +
-        "</strong> · ancho <strong>" + fmtM(mm.anchoM) + "</strong> · " + mm.px + " px" + (mm.recortada ? " · <em>toca el borde de la zona</em>" : "")
-      : "Sin mancha detectada";
+      ? nombre + ": tope <strong>" + fmtM(mm.topeM) + "</strong> sobre la cumbre · alto <strong>" + fmtTam(mm.altoM) +
+        "</strong> · ancho <strong>" + fmtTam(mm.anchoM) + "</strong> · " + mm.px + " px" + (mm.recortada ? " · <em>toca el borde de la zona</em>" : "")
+      : (r ? (modo === "ceniza" ? "Sin columna conectada al cráter" : "Sin mancha detectada") : "");
     $("btn-usar-tope").disabled = !mm;
     dibujarOverlay();
   }
@@ -867,21 +1029,32 @@ window.CAM_CONFIG = {
   function fmtTam(v) { return v < 5 ? "< 5 m" : fmtM(v); }
   setInterval(actualizarInserto, 1000);
 
+  function calcularIndice() {
+    analizar();
+    const ai = estado.anInc;
+    if (!ai) return null;
+    return { indice: ai.indice, lumRoi: ai.lumRoi, lumCuadro: estado.car ? estado.car.lum : null, rojizos: ai.rojizos, brillantes: ai.brillantes,
+      mancha: ai.mancha, ceniza: estado.anCen, modo: estado.modoDet };
+  }
+
   function muestrear() {
     const m = calcularIndice();
     if (!m) { indiceEl.innerHTML = "Índice: <strong>no disponible</strong>"; return; }
     estado.ultimoIndice = m.indice;
-    const t = new Date();
-    estado.muestras.push({ t: t.toISOString(), indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null,
+    const t = new Date(), c = m.ceniza, mc = c && c.mancha;
+    estado.muestras.push({ t: t.toISOString(), modo: m.modo, indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null,
       rojizos: m.rojizos, brillantes: m.brillantes, umbralBrillo: estado.ajustes.umbralBrillo,
       topeInc: m.mancha ? Math.round(m.mancha.topeM) : null, altoInc: m.mancha ? Math.round(m.mancha.altoM) : null,
-      anchoInc: m.mancha ? Math.round(m.mancha.anchoM) : null });
+      anchoInc: m.mancha ? Math.round(m.mancha.anchoM) : null,
+      indCen: c ? +c.indice.toFixed(2) : null, calidos: c ? c.calidos : null, oscuros: c ? c.oscuros : null,
+      topeCol: mc ? Math.round(mc.topeM) : null, altoCol: mc ? Math.round(mc.altoM) : null, anchoCol: mc ? Math.round(mc.anchoM) : null });
     if (estado.muestras.length > 5000) estado.muestras.splice(0, estado.muestras.length - 5000);
     guardar(LS.muestras, estado.muestras);
     const alerta = m.indice >= estado.ajustes.umbral;
     indiceEl.classList.toggle("alerta", alerta);
-    indiceEl.innerHTML = "Índice: <strong>" + m.indice.toFixed(2) + " %</strong> · luminancia ROI " + m.lumRoi.toFixed(0) +
-      (m.lumCuadro != null ? " · cuadro " + m.lumCuadro.toFixed(0) + (m.lumCuadro < 40 ? " (noche)" : "") : "") + (alerta ? " · INCANDESCENCIA" : "");
+    indiceEl.innerHTML = "Incandescencia: <strong>" + m.indice.toFixed(2) + " %</strong>" +
+      (c ? " · ceniza: <strong>" + c.indice.toFixed(2) + " %</strong>" : "") +
+      (m.lumCuadro != null ? " · luminancia del cuadro " + m.lumCuadro.toFixed(0) : "") + " · detector " + (m.modo === "ceniza" ? "de día" : "de noche");
     dibujarGrafico();
   }
   function reprogramarMuestreo() {
@@ -911,8 +1084,10 @@ window.CAM_CONFIG = {
     const pw = Wc - izq - der, ph = Hc - arr - aba;
     ctx.font = "11px system-ui, sans-serif";
     const ahora = Date.now();
-    const ms = estado.muestras.filter(s => ahora - new Date(s.t).getTime() <= VENTANA_GRAF_MS);
-    const umbral = estado.ajustes.umbral;
+    const ceniza = estado.modoDet === "ceniza";
+    const valor = (s) => ceniza ? s.indCen : s.indice;
+    const ms = estado.muestras.filter(s => ahora - new Date(s.t).getTime() <= VENTANA_GRAF_MS && valor(s) != null);
+    const umbral = ceniza ? estado.ajustes.umbralCeniza : estado.ajustes.umbral;
     if (!ms.length) {
       puntosGraf = [];
       ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -920,7 +1095,7 @@ window.CAM_CONFIG = {
       ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       return;
     }
-    const max = Math.max(1, umbral * 1.5, ...ms.map(s => s.indice)) * 1.08;
+    const max = Math.max(1, umbral * 1.5, ...ms.map(valor)) * 1.08;
     const t0 = new Date(ms[0].t).getTime(), t1 = Math.max(t0 + 60000, new Date(ms[ms.length - 1].t).getTime());
     const X = (t) => izq + pw * ((t - t0) / (t1 - t0));
     const Y = (v) => arr + ph * (1 - v / max);
@@ -935,7 +1110,7 @@ window.CAM_CONFIG = {
     ctx.fillStyle = "#9aa7b4"; ctx.textAlign = "right"; ctx.fillText(String(umbral), izq - 4, Y(umbral));
     ctx.textAlign = "left"; ctx.fillText("umbral", izq + 4, Y(umbral) - 7);
     // Serie
-    puntosGraf = ms.map(s => ({ x: X(new Date(s.t).getTime()), y: Y(s.indice), s }));
+    puntosGraf = ms.map(s => ({ x: X(new Date(s.t).getTime()), y: Y(valor(s)), s }));
     ctx.strokeStyle = "#f4a261"; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.beginPath();
     puntosGraf.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
     ctx.stroke();
@@ -956,12 +1131,14 @@ window.CAM_CONFIG = {
       ctx.fillStyle = "#f4a261"; ctx.strokeStyle = "#0f1419"; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
       const t = new Date(p.s.t);
-      lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · índice " + p.s.indice.toFixed(2) + " %" +
-        (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "") +
-        (p.s.topeInc != null ? " · tope " + p.s.topeInc + " m, alto " + p.s.altoInc + " m, ancho " + p.s.anchoInc + " m" : "");
+      lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · índice " + valor(p.s).toFixed(2) + " %" + (ceniza
+        ? (p.s.calidos != null ? " · " + p.s.calidos + " más cálidos, " + p.s.oscuros + " más oscuros" : "") +
+          (p.s.topeCol != null ? " · columna: tope " + p.s.topeCol + " m, alto " + p.s.altoCol + " m, ancho " + p.s.anchoCol + " m" : "")
+        : (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "") +
+          (p.s.topeInc != null ? " · tope " + p.s.topeInc + " m, alto " + p.s.altoInc + " m, ancho " + p.s.anchoInc + " m" : ""));
     } else {
       const u = ms[ms.length - 1];
-      lect.textContent = "Última: " + fmtLocal.format(new Date(u.t)) + " · " + u.indice.toFixed(2) + " % · " + ms.length + " muestras en 6 h";
+      lect.textContent = "Última: " + fmtLocal.format(new Date(u.t)) + " · " + valor(u).toFixed(2) + " % · " + ms.length + " muestras en 6 h";
     }
   }
   grafico.addEventListener("mousemove", (ev) => dibujarGrafico(ev.clientX - grafico.getBoundingClientRect().left));
@@ -1016,24 +1193,27 @@ window.CAM_CONFIG = {
       overlay.appendChild(gm);
     }
 
-    // ROI y manijas en modo calibrar
-    const r = estado.roi;
-    if (estado.modoUi === "calibrar" || estado.ajustes.marco !== false) {
-      // Solo el borde; en modo Calibrar el interior sigue siendo arrastrable.
-      overlay.appendChild(el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "none", stroke: "#e5533d",
-        "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": estado.modoUi === "calibrar" ? "all" : "none",
-        class: estado.modoUi === "calibrar" ? "arrastrable" : "", "data-manija": "roi" }));
-    }
+    // Zonas de detección: la ROI del cráter (incandescencia, rojo) y la
+    // zona de columna (ceniza, café). Fuera de Calibrar se ve solo la del
+    // detector activo. Solo el borde; en Calibrar el interior se arrastra.
+    const r = estado.roi, zc = estado.zonaCol, cal = estado.modoUi === "calibrar";
+    const marcoVisible = estado.ajustes.marco !== false;
+    const zonaRect = (q, color, manija) => overlay.appendChild(el("rect", { x: q.x, y: q.y, width: q.w, height: q.h, fill: "none", stroke: color,
+      "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": cal ? "all" : "none",
+      class: cal ? "arrastrable" : "", "data-manija": manija }));
+    if (cal || (marcoVisible && estado.modoDet === "ceniza")) zonaRect(zc, "rgb(232,170,90)", "zona");
+    if (cal || (marcoVisible && estado.modoDet !== "ceniza")) zonaRect(r, "#e5533d", "roi");
     const mm = estado.mancha;
-    if (mm && estado.ajustes.marco !== false && !$("inserto").hidden) {
-      const gm = el("g", { stroke: "rgb(0,229,255)", fill: "none", "stroke-width": 1.2, "pointer-events": "none" });
+    if (mm && marcoVisible && !$("inserto").hidden) {
+      const colorGuia = COLOR_GUIA[mm.modo] || COLOR_GUIA.incand;
+      const gm = el("g", { stroke: colorGuia, fill: "none", "stroke-width": 1.2, "pointer-events": "none" });
       gm.appendChild(el("rect", { x: mm.izqRef, y: mm.topRef, width: mm.derRef - mm.izqRef, height: mm.botRef - mm.topRef }));
-      const xc = Math.max(mm.derRef, r.x + r.w) + 8;
+      const xc = mm.modo === "ceniza" ? mm.derRef + 8 : Math.max(mm.derRef, r.x + r.w) + 8;
       gm.appendChild(el("line", { x1: mm.derRef, y1: mm.topRef, x2: xc + 4, y2: mm.topRef, "stroke-dasharray": "3 2" }));
       gm.appendChild(el("line", { x1: xc, y1: mm.topRef, x2: xc, y2: mm.botRef }));
       gm.appendChild(el("line", { x1: xc - 3, y1: mm.botRef, x2: xc + 3, y2: mm.botRef }));
-      gm.appendChild(el("text", { x: xc + 7, y: mm.topRef + 4, fill: "rgb(0,229,255)", stroke: "rgba(0,0,0,0.6)", "stroke-width": 2.5,
-        "paint-order": "stroke", "font-size": 13, "font-family": "system-ui, sans-serif" }, "tope " + fmtM(mm.topeM)));
+      gm.appendChild(el("text", { x: xc + 7, y: mm.topRef + 4, fill: colorGuia, stroke: "rgba(0,0,0,0.6)", "stroke-width": 2.5,
+        "paint-order": "stroke", "font-size": 13, "font-family": "system-ui, sans-serif" }, (mm.modo === "ceniza" ? "columna " : "tope ") + fmtM(mm.topeM)));
       overlay.appendChild(gm);
     }
     if (estado.modoUi === "calibrar") {
@@ -1045,6 +1225,9 @@ window.CAM_CONFIG = {
         "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, c.alturaMax + " m: arrastre para escalar"));
       // esquina de la ROI para redimensionar
       overlay.appendChild(el("rect", { x: r.x + r.w - 7, y: r.y + r.h - 7, width: 14, height: 14, fill: "#e5533d", stroke: "#000", class: "arrastrable", "data-manija": "roi-esq" }));
+      overlay.appendChild(el("rect", { x: zc.x + zc.w - 7, y: zc.y + zc.h - 7, width: 14, height: 14, fill: "rgb(232,170,90)", stroke: "#000", class: "arrastrable", "data-manija": "zona-esq" }));
+      overlay.appendChild(el("text", { x: zc.x + 6, y: zc.y + 16, fill: "rgb(232,170,90)", "font-size": 13, stroke: "rgba(0,0,0,0.8)",
+        "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "zona de columna (ceniza)"));
     }
     actualizarLectura();
   }
@@ -1069,7 +1252,7 @@ window.CAM_CONFIG = {
     if (estado.modoUi === "medir") { estado.marcadorY = p.y; arrastre = { tipo: "marcador" }; dibujarOverlay(); return; }
     const m = ev.target.getAttribute && ev.target.getAttribute("data-manija");
     if (!m) return;
-    arrastre = { tipo: m, p0: p, calib0: Object.assign({}, estado.calib), roi0: Object.assign({}, estado.roi) };
+    arrastre = { tipo: m, p0: p, calib0: Object.assign({}, estado.calib), roi0: Object.assign({}, estado.roi), zona0: Object.assign({}, estado.zonaCol) };
   });
   overlay.addEventListener("pointermove", (ev) => {
     if (!arrastre) return;
@@ -1086,13 +1269,17 @@ window.CAM_CONFIG = {
       estado.roi.x = r0.x + dx; estado.roi.y = r0.y + dy;
     } else if (arrastre.tipo === "roi-esq") {
       estado.roi.w = Math.max(10, r0.w + dx); estado.roi.h = Math.max(10, r0.h + dy);
+    } else if (arrastre.tipo === "zona") {
+      estado.zonaCol.x = arrastre.zona0.x + dx; estado.zonaCol.y = arrastre.zona0.y + dy;
+    } else if (arrastre.tipo === "zona-esq") {
+      estado.zonaCol.w = Math.max(40, arrastre.zona0.w + dx); estado.zonaCol.h = Math.max(40, arrastre.zona0.h + dy);
     }
     dibujarOverlay(); llenarCalib();
-    if (arrastre.tipo.startsWith("roi") || arrastre.tipo === "base") actualizarInserto();
+    if (arrastre.tipo.startsWith("roi") || arrastre.tipo.startsWith("zona") || arrastre.tipo === "base") actualizarInserto();
   });
   const soltar = () => {
     if (!arrastre) return;
-    if (arrastre.tipo !== "marcador") { guardar(LS.calib, estado.calib); guardar(LS.roi, estado.roi); }
+    if (arrastre.tipo !== "marcador") { guardar(LS.calib, estado.calib); guardar(LS.roi, estado.roi); guardar(LS.zonaCol, estado.zonaCol); }
     arrastre = null;
   };
   overlay.addEventListener("pointerup", soltar);
@@ -1149,7 +1336,8 @@ window.CAM_CONFIG = {
       tr.innerHTML = "<td>" + horaLocal(new Date(r.t)) + "</td><td>" + r.tipo + "</td><td class='num'>" + (r.altura != null ? r.altura : "") +
         "</td><td class='num'>" + (r.indice != null ? r.indice.toFixed(2) : "") +
         "</td><td class='num'>" + (r.topeInc != null ? r.topeInc : "") + "</td><td class='num'>" + (r.altoInc != null ? r.altoInc : "") +
-        "</td><td class='num'>" + (r.anchoInc != null ? r.anchoInc : "") + "</td><td>" + escapar(r.nota || "") +
+        "</td><td class='num'>" + (r.anchoInc != null ? r.anchoInc : "") + "</td><td class='num'>" + (r.indCen != null ? r.indCen.toFixed(2) : "") +
+        "</td><td>" + escapar(r.nota || "") +
         "</td><td><button class='quitar' title='Quitar' data-i='" + idx + "'>✕</button></td>";
       tb.appendChild(tr);
     });
@@ -1169,6 +1357,7 @@ window.CAM_CONFIG = {
       topeInc: m && m.mancha ? Math.round(m.mancha.topeM) : null,
       altoInc: m && m.mancha ? Math.round(m.mancha.altoM) : null,
       anchoInc: m && m.mancha ? Math.round(m.mancha.anchoM) : null,
+      indCen: m && m.ceniza ? +m.ceniza.indice.toFixed(2) : null,
       nota: $("r-nota").value.trim()
     });
     guardar(LS.registro, estado.registro); renderRegistro(); $("r-nota").value = "";
@@ -1179,18 +1368,20 @@ window.CAM_CONFIG = {
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = nombre; a.click();
   }
   $("btn-exp-registro").addEventListener("click", () => {
-    descargarCsv("registro_tata.csv", [["fecha_hora_local", "iso_utc", "tipo", "altura_m", "indice_pct", "tope_incand_m", "alto_incand_m", "ancho_incand_m", "nota"]]
-      .concat(estado.registro.map(r => [horaLocal(new Date(r.t)), r.t, r.tipo, r.altura, r.indice, r.topeInc, r.altoInc, r.anchoInc, r.nota])));
+    descargarCsv("registro_tata.csv", [["fecha_hora_local", "iso_utc", "tipo", "altura_m", "indice_incand_pct", "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "nota"]]
+      .concat(estado.registro.map(r => [horaLocal(new Date(r.t)), r.t, r.tipo, r.altura, r.indice, r.topeInc, r.altoInc, r.anchoInc, r.indCen, r.nota])));
   });
   $("btn-borrar-registro").addEventListener("click", () => {
     if (confirm("¿Borrar todo el registro de observaciones de este navegador?")) { estado.registro = []; guardar(LS.registro, []); renderRegistro(); }
   });
   $("btn-exp-muestras").addEventListener("click", () => {
-    descargarCsv("muestras_incandescencia.csv", [["fecha_hora_local", "iso_utc", "indice_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo", "tope_incand_m", "alto_incand_m", "ancho_incand_m"]]
-      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo, s.topeInc, s.altoInc, s.anchoInc])));
+    descargarCsv("muestras_deteccion.csv", [["fecha_hora_local", "iso_utc", "detector", "indice_incand_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo",
+      "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "tope_columna_m", "alto_columna_m", "ancho_columna_m"]]
+      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.modo === "ceniza" ? "dia" : "noche", s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo,
+        s.topeInc, s.altoInc, s.anchoInc, s.indCen, s.calidos, s.oscuros, s.topeCol, s.altoCol, s.anchoCol])));
   });
   $("btn-borrar-muestras").addEventListener("click", () => {
-    if (confirm("¿Borrar las muestras del índice de incandescencia?")) { estado.muestras = []; guardar(LS.muestras, []); dibujarGrafico(); }
+    if (confirm("¿Borrar las muestras de los índices de incandescencia y ceniza?")) { estado.muestras = []; guardar(LS.muestras, []); dibujarGrafico(); }
   });
 
   // ---------- Formularios ----------
@@ -1198,7 +1389,8 @@ window.CAM_CONFIG = {
     const a = estado.ajustes;
     $("in-alias").value = a.alias; $("in-modo").value = a.modo; $("in-hls").value = a.hlsUrl; $("in-snap").value = a.snapshotUrl;
     $("in-int-snap").value = a.intervaloSnapshot; $("n-int").value = a.intervaloMuestreo; $("n-umbral").value = a.umbral;
-    $("n-muestreo").checked = $("n-muestreo-ins").checked = !!a.muestreo; $("n-brillo-umbral").value = a.umbralBrillo; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
+    $("n-muestreo").checked = $("n-muestreo-ins").checked = !!a.muestreo; $("n-brillo-umbral").value = a.umbralBrillo;
+    $("c-umbral").value = a.umbralCeniza; $("c-calidez").value = a.umbralCalidez; $("c-oscuro").value = a.umbralOscuro; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
   }
   function leerFuente() {
     const a = estado.ajustes;
@@ -1210,6 +1402,8 @@ window.CAM_CONFIG = {
     const c = estado.calib, r = estado.roi;
     $("cal-x").value = c.x.toFixed(1); $("cal-y0").value = c.y0.toFixed(1); $("cal-px").value = c.pxPor100m.toFixed(2); $("cal-max").value = c.alturaMax;
     $("cal-roi").value = [r.x, r.y, r.w, r.h].map(v => Math.round(v)).join(", ");
+    const zc = estado.zonaCol;
+    $("cal-zona").value = [zc.x, zc.y, zc.w, zc.h].map(v => Math.round(v)).join(", ");
   }
   $("btn-conectar").addEventListener("click", () => { leerFuente(); conectar(); });
   $("btn-abrir-cam").addEventListener("click", () => window.open("https://www.nevadosdechillan.com/camaras", "_blank", "noopener"));
@@ -1218,23 +1412,36 @@ window.CAM_CONFIG = {
     c.x = +$("cal-x").value; c.y0 = +$("cal-y0").value; c.pxPor100m = Math.max(2, +$("cal-px").value); c.alturaMax = Math.max(100, +$("cal-max").value);
     const partes = $("cal-roi").value.split(/[,\s]+/).map(Number).filter(v => !isNaN(v));
     if (partes.length === 4) estado.roi = { x: partes[0], y: partes[1], w: partes[2], h: partes[3] };
-    guardar(LS.calib, c); guardar(LS.roi, estado.roi); dibujarOverlay(); llenarCalib();
+    const pz = $("cal-zona").value.split(/[,\s]+/).map(Number).filter(v => !isNaN(v));
+    if (pz.length === 4) estado.zonaCol = { x: pz[0], y: pz[1], w: Math.max(40, pz[2]), h: Math.max(40, pz[3]) };
+    guardar(LS.calib, c); guardar(LS.roi, estado.roi); guardar(LS.zonaCol, estado.zonaCol); dibujarOverlay(); llenarCalib();
   });
   $("btn-cal-reset").addEventListener("click", () => {
     estado.calib = Object.assign({}, CFG.calibracion); estado.roi = Object.assign({}, CFG.roi);
-    localStorage.removeItem(LS.calib); localStorage.removeItem(LS.roi); dibujarOverlay(); llenarCalib();
+    estado.zonaCol = Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 });
+    try { localStorage.removeItem(LS.calib); localStorage.removeItem(LS.roi); localStorage.removeItem(LS.zonaCol); } catch (e) {}
+    dibujarOverlay(); llenarCalib();
   });
   const guardarNoche = () => {
     const a = estado.ajustes;
     a.brillo = +$("n-brillo").value; a.contraste = +$("n-contraste").value; a.muestreo = $("n-muestreo").checked;
     a.intervaloMuestreo = +$("n-int").value || 10; a.umbral = +$("n-umbral").value || 0;
     a.umbralBrillo = Math.min(255, Math.max(1, +$("n-brillo-umbral").value || 200));
+    a.umbralCeniza = Math.max(0, +$("c-umbral").value || 0);
+    a.umbralCalidez = Math.max(1, +$("c-calidez").value || 12);
+    a.umbralOscuro = Math.max(1, +$("c-oscuro").value || 25);
     guardar(LS.ajustes, a); aplicarFiltro(); dibujarOverlay();
   };
-  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); dibujarGrafico(); }));
+  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral", "c-umbral", "c-calidez", "c-oscuro"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); dibujarGrafico(); }));
   $("n-muestreo").addEventListener("change", () => { $("n-muestreo-ins").checked = $("n-muestreo").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   $("n-muestreo-ins").addEventListener("change", () => { $("n-muestreo").checked = $("n-muestreo-ins").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
+  $("btn-fondo").addEventListener("click", () => { reiniciarFondo(); actualizarInserto(); });
+  // Selector de detector en el recuadro: automático, ceniza o incandescencia.
+  document.querySelectorAll("[data-det]").forEach(b => b.addEventListener("click", () => {
+    estado.ajustes.detector = b.dataset.det; guardar(LS.ajustes, estado.ajustes);
+    actualizarInserto(); dibujarGrafico();
+  }));
   $("btn-noche").addEventListener("click", () => { $("n-brillo").value = 2.2; $("n-contraste").value = 1.4; guardarNoche(); });
   $("btn-dia").addEventListener("click", () => { $("n-brillo").value = 1; $("n-contraste").value = 1; guardarNoche(); });
 
@@ -1250,7 +1457,7 @@ window.CAM_CONFIG = {
   $("btn-usar-tope").addEventListener("click", () => {
     if (!estado.mancha) return;
     estado.marcadorY = estado.mancha.topRef;
-    $("r-tipo").value = "incandescencia";
+    $("r-tipo").value = estado.mancha.modo === "ceniza" ? "columna" : "incandescencia";
     dibujarOverlay();
   });
 

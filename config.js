@@ -47,7 +47,17 @@ window.CAM_CONFIG = {
   // criterio que detecta la incandescencia. Valor provisional.
   umbralBrillo: 200,
 
-  // Segundos entre muestras del índice de incandescencia.
+  // Detección de ceniza (de día). Zona de columna sobre el cráter, en
+  // píxeles de referencia, y umbrales provisionales:
+  //   umbralCeniza  : % de píxeles de la zona para marcar posible emisión
+  //   umbralCalidez : aumento mínimo de R − B de un píxel sobre su fondo
+  //   umbralOscuro  : baja mínima de luminancia de un píxel bajo su fondo
+  zonaColumna: { x: 568, y: 241, w: 600, h: 335 },
+  umbralCeniza: 1,
+  umbralCalidez: 12,
+  umbralOscuro: 25,
+
+  // Segundos entre muestras de los índices.
   intervaloMuestreo: 10,
 
   // Relación de aspecto a usar cuando no se conoce el tamaño del video

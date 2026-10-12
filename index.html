@@ -50,7 +50,12 @@
 
   <section class="inserto" id="inserto" aria-label="Zona de detección de incandescencia">
     <div class="inserto-cab">
-      <strong>Zona de detección</strong>
+      <strong id="inserto-titulo">Detección</strong>
+      <div class="grupo segmentado mini" role="group" aria-label="Detector">
+        <button class="boton chico" data-det="auto" title="Ceniza de día, incandescencia de noche, según la imagen">Auto</button>
+        <button class="boton chico" data-det="ceniza" title="Forzar la detección de ceniza">Ceniza</button>
+        <button class="boton chico" data-det="incand" title="Forzar la detección de incandescencia">Incandescencia</button>
+      </div>
       <button class="boton icono chico" id="btn-cerrar-inserto" aria-label="Ocultar recuadro" title="Ocultar (tecla Z)">✕</button>
     </div>
     <div class="inserto-vistas">
@@ -60,7 +65,7 @@
       </figure>
       <figure>
         <canvas id="roi-mascara" aria-label="Píxeles detectados como incandescentes"></canvas>
-        <figcaption><span class="muestra rojizo"></span>rojizo <span class="muestra brillante"></span>brillante</figcaption>
+        <figcaption><span class="muestra" id="ley-1-m"></span><span id="ley-1">rojizo</span> <span class="muestra segunda" id="ley-2-m"></span><span id="ley-2">brillante</span></figcaption>
       </figure>
     </div>
     <p class="inserto-info" id="roi-info">Sin imagen</p>
@@ -70,7 +75,7 @@
     </div>
     <div class="inserto-graf">
       <div class="inserto-graf-cab">
-        <span>Índice en el tiempo (%)</span>
+        <span id="graf-titulo">Índice en el tiempo (%)</span>
         <label class="fila chica"><input id="n-muestreo-ins" type="checkbox"> registrar</label>
       </div>
       <canvas id="grafico" class="grafico" aria-label="Índice de incandescencia en el tiempo"></canvas>
@@ -117,6 +122,7 @@
         <label>Píxeles por 100 m <input id="cal-px" type="number" step="0.1"></label>
         <label>Altura máxima (m) <input id="cal-max" type="number" step="100"></label>
         <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="808, 525, 120, 68"></label>
+        <label>Zona de columna para ceniza x, y, ancho, alto (px ref) <input id="cal-zona" placeholder="568, 241, 600, 335"></label>
         <div class="acciones">
           <button class="boton primario" id="btn-cal-aplicar">Aplicar</button>
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
@@ -126,7 +132,7 @@
     </details>
 
     <details class="panel">
-      <summary>Noche e incandescencia</summary>
+      <summary>Detección de incandescencia y ceniza</summary>
       <div class="campos">
         <label>Brillo <input id="n-brillo" type="range" min="0.5" max="4" step="0.1" value="1"></label>
         <label>Contraste <input id="n-contraste" type="range" min="0.5" max="3" step="0.1" value="1"></label>
@@ -134,16 +140,26 @@
           <button class="boton" id="btn-noche">Preset noche</button>
           <button class="boton" id="btn-dia">Sin realce</button>
         </div>
-        <label class="fila"><input id="n-muestreo" type="checkbox"> Muestrear índice de incandescencia automáticamente</label>
+        <label class="fila"><input id="n-muestreo" type="checkbox"> Registrar los índices automáticamente</label>
         <label>Intervalo de muestreo (s) <input id="n-int" type="number" min="2" step="1"></label>
+        <h3 class="subtitulo">Incandescencia (noche)</h3>
         <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
         <label>Umbral de brillo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
+        <h3 class="subtitulo">Ceniza (día)</h3>
+        <label>Umbral de alerta (%) <input id="c-umbral" type="number" min="0" step="0.5"></label>
+        <label>Umbral de calidez: aumento de R − B sobre el fondo <input id="c-calidez" type="number" min="1" step="1"></label>
+        <label>Umbral de oscurecimiento: baja de luminancia bajo el fondo <input id="c-oscuro" type="number" min="1" step="1"></label>
+        <div class="acciones">
+          <button class="boton" id="btn-fondo" title="Volver a formar el fondo con la imagen actual">Reiniciar fondo</button>
+        </div>
         <div class="indice" id="indice">Índice: <strong>--</strong></div>
         <div class="acciones">
           <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
           <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
         </div>
-        <p class="nota">El índice es el porcentaje de píxeles rojizos o brillantes dentro de la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el criterio de brillo. Requiere que el servidor permita leer los píxeles (CORS); si no, queda la clasificación manual.</p>
+        <p class="nota">Incandescencia: porcentaje de píxeles rojizos o brillantes en la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el brillo.</p>
+        <p class="nota">Ceniza: porcentaje de píxeles de la zona de columna que se volvieron más cálidos o más oscuros que su propio fondo, un promedio lento de los últimos minutos. La columna es la mancha más grande que toca la ROI del cráter. El fondo se forma al abrir el sitio; si en ese momento ya hay una emisión, use Reiniciar fondo con el cielo despejado.</p>
+        <p class="nota">Ambos índices requieren que el servidor permita leer los píxeles (CORS).</p>
       </div>
     </details>
 
@@ -166,7 +182,7 @@
         </div>
         <div class="tabla-env">
           <table id="tabla">
-            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Índice (%)</th><th>Tope inc. (m)</th><th>Alto inc. (m)</th><th>Ancho inc. (m)</th><th>Nota</th><th></th></tr></thead>
+            <thead><tr><th>Hora</th><th>Tipo</th><th>Altura (m)</th><th>Incand. (%)</th><th>Tope inc. (m)</th><th>Alto inc. (m)</th><th>Ancho inc. (m)</th><th>Ceniza (%)</th><th>Nota</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>

@@ -10,6 +10,7 @@ El sitio no necesita servidor ni compilación. Se puede publicar en GitHub Pages
 - Permite medir la altura de la columna con un clic o arrastre sobre el video y registrar la observación con hora local de Chile.
 - Calcula un índice de incandescencia nocturna, definido como el porcentaje de píxeles rojizos o brillantes dentro de una región de interés sobre el cráter, y lo grafica en el tiempo.
 - Muestra abajo a la izquierda una ampliación de la región de interés y una máscara con los píxeles detectados: amarillo para rojizos y cian para brillantes.
+- De día detecta posibles emisiones de ceniza en una zona de columna sobre el cráter y estima la altura del tope de la columna.
 - Ofrece realce de brillo y contraste para observación nocturna.
 - Guarda la calibración, el registro de observaciones y las muestras del índice en el navegador y las exporta a CSV.
 - Exporta capturas PNG con la escala, el marcador de altura y la hora impresos sobre el cuadro.
@@ -69,6 +70,7 @@ Detalle de cada modo:
 - **Calibrar**: aparecen tres manijas. El punto celeste (0 m) se arrastra hasta la cumbre, el punto verde (500 m) fija la escala y el rectángulo rojo es la región de interés para incandescencia. También se pueden escribir los valores en el panel Calibración.
 - **Detección**: muestra u oculta el recuadro de la región de interés, también con la tecla Z. La máscara permite ver qué píxeles cuentan para el índice y ajustar el umbral de brillo. Debajo, un gráfico muestra el índice de las últimas 6 horas con el umbral de alerta; al pasar el mouse se lee la hora local, la hora UTC y el valor de cada muestra. La casilla «registrar» activa el muestreo automático.
 - **Tope, alto y ancho de la incandescencia**: el recuadro de detección toma la mancha conectada más grande de la máscara, de al menos 6 píxeles, y la convierte a metros con la calibración. Informa a qué altura sobre la cumbre llega su borde superior y cuánto mide de alto y de ancho. Sobre la imagen se dibuja en cian la caja de la mancha y una cota con el tope. El botón «Medir tope» lleva el marcador de altura a ese borde y deja el tipo de registro en incandescencia, para ajustarlo si hace falta y registrarlo. El registro y las muestras guardan las tres medidas.
+- **Detección de ceniza (de día)**: el recuadro cambia solo entre ceniza e incandescencia según la imagen. De día la cámara transmite en color y luminosa; de noche, en blanco y negro u oscura. El selector Auto, Ceniza, Incandescencia del recuadro permite fijar el detector. El método se explica más abajo.
 - **Marco**: muestra u oculta el borde de la región de interés sobre la imagen, también con la tecla R. En modo Calibrar el marco se ve siempre.
 - **Criterios del índice**: un píxel cuenta si es rojizo, es decir brillante y con dominante roja, o si su luminancia supera el umbral de brillo, que por defecto es 200 en una escala de 0 a 255. De noche la cámara transmite en blanco y negro, así que solo actúa el criterio de brillo. De día, la nieve muy iluminada puede superar el umbral; la luminancia del cuadro, registrada en cada muestra, permite separar día y noche.
 - **Noche**: en el panel lateral se activa el muestreo automático para calcular el índice cada N segundos. Cuando supera el umbral, la lectura se marca en rojo. Los presets de brillo y contraste solo afectan la visualización, no el análisis.
@@ -97,6 +99,23 @@ Los 47.5 px por 100 m originales se midieron directamente sobre la captura. Por 
 - La escala es lineal. El lente gran angular deforma los bordes del cuadro, pero el cráter está cerca del centro, donde la deformación es menor. Las columnas que superen el cuadro superior de la escala conviene interpretarlas con más cautela.
 - La escala debe verificarse con una referencia de altitud conocida antes de reportar valores. Hasta entonces las alturas son estimaciones.
 - Si la cámara cambia de encuadre o de zoom, la calibración deja de valer y hay que repetirla con el modo Calibrar.
+
+## Detección de ceniza
+
+En las imágenes disponibles, tomadas al atardecer, la cámara deja el cielo, las nubes y la nieve con un tono azulado parejo: el canal rojo queda entre 30 y 60 niveles bajo el azul. La ceniza es gris café, más cálida que lo que la rodea. Como el balance de color cambia con la hora y el clima, el sitio no usa un umbral fijo de color, sino que compara cada píxel con su propio pasado.
+
+1. **Zona de columna.** Se analiza un rectángulo sobre el cráter, por defecto desde unos 20 m bajo la cumbre hasta unos 600 m sobre ella, reducido a 300 píxeles de ancho. Se ajusta en modo Calibrar, arrastrando el rectángulo café, o en el panel Calibración.
+2. **Fondo adaptativo.** Para cada píxel se mantiene un promedio lento de su tono (R − B) y de su luminancia, con una constante de tiempo de 10 minutos. El terreno, la nieve y el cielo quieto se cancelan.
+3. **Dos señales.** Un píxel cuenta como candidato si se volvió más cálido que su fondo, con un aumento de R − B de al menos 12 niveles, o si se oscureció en al menos 25 niveles. A cada diferencia se le resta la mediana de la zona, para que un cambio general de luz no active la detección. En la máscara, café es más cálido y lila es más oscuro.
+4. **Columna enraizada en el cráter.** La columna es la mancha conectada más grande que toca la ROI del cráter. Su borde superior da el tope sobre la cumbre, y su extensión, el alto y el ancho.
+5. **Índice y alerta.** El índice de ceniza es el porcentaje de píxeles candidatos en la zona. Sobre el umbral, 1 % por defecto, el recuadro marca posible emisión.
+
+Limitaciones que conviene tener presentes:
+
+- El método se probó solo con imágenes simuladas: una columna gris café agregada a una foto real, una nube azulada lejos del cráter y un cambio general de luz. La columna se detectó con su tope a 340 m, y la nube y el cambio de luz no generaron detección. Los umbrales deben ajustarse con imágenes reales de emisiones de esta cámara.
+- El fondo se forma al abrir el sitio. Si en ese momento ya hay una emisión, queda incorporada al fondo y no se detecta hasta que cambie. En ese caso conviene usar Reiniciar fondo con el cielo despejado. Una emisión que dura muchos minutos se va incorporando al fondo, aunque diez veces más lento que el resto.
+- Una nube oscura que pase sobre el cráter, o la sombra de una nube, puede activar la señal de oscurecimiento. Una columna de vapor blanca contra cielo azul puede verse más cálida que el fondo. La máscara permite juzgar cada caso.
+- El script de monitoreo todavía no incluye la detección de ceniza.
 - Las medidas de la incandescencia comparten los supuestos de la altura de columna. Además, un píxel equivale a unos 1.85 m en el plano del cráter, así que alto y ancho tienen una resolución de unos 2 m y se muestran redondeados a 5 m. Un punto muy brillante se expande algunos píxeles en el sensor, lo que tiende a sobrestimar alto y ancho. El resplandor reflejado en gases o nubes también puede quedar sobre el umbral y alargar la mancha hacia arriba. Si la mancha toca el borde de la zona de detección, el recuadro lo advierte, porque puede estar recortada.
 
 ## Registro automático desde un computador
