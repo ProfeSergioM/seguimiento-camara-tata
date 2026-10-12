@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 h";
+  const VERSION = "2026-10-11 i";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -561,7 +561,7 @@
 
     // ROI y manijas en modo calibrar
     const r = estado.roi;
-    if (estado.modoUi === "calibrar" || estado.ajustes.muestreo) {
+    if (estado.modoUi === "calibrar" || estado.ajustes.marco !== false) {
       // Solo el borde; en modo Calibrar el interior sigue siendo arrastrable.
       overlay.appendChild(el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "none", stroke: "#e5533d",
         "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": estado.modoUi === "calibrar" ? "all" : "none",
@@ -770,6 +770,15 @@
     if (ver) { actualizarInserto(); dibujarGrafico(); }
   }
   $("btn-inserto").addEventListener("click", () => mostrarInserto($("inserto").hidden));
+
+  // Marco de la zona de detección sobre la imagen. En modo Calibrar se
+  // muestra siempre, porque es lo que se arrastra.
+  function mostrarMarco(ver) {
+    estado.ajustes.marco = ver; guardar(LS.ajustes, estado.ajustes);
+    $("btn-marco").classList.toggle("activo", ver);
+    dibujarOverlay();
+  }
+  $("btn-marco").addEventListener("click", () => mostrarMarco(estado.ajustes.marco === false));
   $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));
 
   // ---------- Barra superior, panel lateral y pantalla completa ----------
@@ -817,11 +826,13 @@
     else if (k === "c") fijarModoUi("calibrar");
     else if (k === "f") pantallaCompleta();
     else if (k === "z") mostrarInserto($("inserto").hidden);
+    else if (k === "r") mostrarMarco(estado.ajustes.marco === false);
   });
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;
   mostrarInserto(estado.ajustes.inserto !== false);
+  mostrarMarco(estado.ajustes.marco !== false);
   console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);

@@ -164,7 +164,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="grupo">
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
       <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
-      <button class="boton" id="btn-inserto" title="Mostrar u ocultar la zona de detección (tecla Z)">Zona</button>
+      <button class="boton" id="btn-inserto" title="Mostrar u ocultar el recuadro de detección de incandescencia (tecla Z)">Detección</button>
+      <button class="boton" id="btn-marco" title="Mostrar u ocultar el marco de la zona de detección sobre la imagen (tecla R)">Marco</button>
       <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
       <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
     </div>
@@ -297,7 +298,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
   <footer class="pie">
     <p>Versión <span id="version"></span>. Imagen de la cámara: Nevados de Chillán vía IPCamLive. La altura se estima sobre la cumbre, suponiendo una columna vertical en el plano del cráter. La calibración es preliminar y debe verificarse con referencias conocidas.</p>
-    <p>Atajos: V ver, M medir, C calibrar, Z zona de detección, F pantalla completa, Esc cerrar este panel.</p>
+    <p>Atajos: V ver, M medir, C calibrar, Z recuadro de detección, R marco sobre la imagen, F pantalla completa, Esc cerrar este panel.</p>
   </footer>
 </aside>
 
@@ -375,7 +376,7 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 h";
+  const VERSION = "2026-10-11 i";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -933,7 +934,7 @@ window.CAM_CONFIG = {
 
     // ROI y manijas en modo calibrar
     const r = estado.roi;
-    if (estado.modoUi === "calibrar" || estado.ajustes.muestreo) {
+    if (estado.modoUi === "calibrar" || estado.ajustes.marco !== false) {
       // Solo el borde; en modo Calibrar el interior sigue siendo arrastrable.
       overlay.appendChild(el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "none", stroke: "#e5533d",
         "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": estado.modoUi === "calibrar" ? "all" : "none",
@@ -1142,6 +1143,15 @@ window.CAM_CONFIG = {
     if (ver) { actualizarInserto(); dibujarGrafico(); }
   }
   $("btn-inserto").addEventListener("click", () => mostrarInserto($("inserto").hidden));
+
+  // Marco de la zona de detección sobre la imagen. En modo Calibrar se
+  // muestra siempre, porque es lo que se arrastra.
+  function mostrarMarco(ver) {
+    estado.ajustes.marco = ver; guardar(LS.ajustes, estado.ajustes);
+    $("btn-marco").classList.toggle("activo", ver);
+    dibujarOverlay();
+  }
+  $("btn-marco").addEventListener("click", () => mostrarMarco(estado.ajustes.marco === false));
   $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));
 
   // ---------- Barra superior, panel lateral y pantalla completa ----------
@@ -1189,11 +1199,13 @@ window.CAM_CONFIG = {
     else if (k === "c") fijarModoUi("calibrar");
     else if (k === "f") pantallaCompleta();
     else if (k === "z") mostrarInserto($("inserto").hidden);
+    else if (k === "r") mostrarMarco(estado.ajustes.marco === false);
   });
 
   // ---------- Inicio ----------
   $("version").textContent = VERSION;
   mostrarInserto(estado.ajustes.inserto !== false);
+  mostrarMarco(estado.ajustes.marco !== false);
   console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);

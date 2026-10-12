@@ -60,14 +60,15 @@ La cámara ocupa toda la ventana. Encima de la imagen hay una barra con los cont
 - **☰**: abre el panel lateral con la fuente, la calibración, el índice de incandescencia y el registro.
 - **Relojes**: hora local de Chile y hora UTC.
 
-Atajos de teclado: V ver, M medir, C calibrar, Z zona de detección, F pantalla completa y Esc para cerrar el panel lateral.
+Atajos de teclado: V ver, M medir, C calibrar, Z recuadro de detección, R marco, F pantalla completa y Esc para cerrar el panel lateral.
 
 Detalle de cada modo:
 
 - **Ver**: la imagen no responde al mouse. En modo iframe se pueden usar los controles del reproductor.
 - **Medir**: un clic o arrastre sobre la imagen coloca una línea horizontal y muestra la altura sobre la cumbre, redondeada a 10 m. Registrar guarda la hora, el tipo de actividad, la altura, el índice de incandescencia y una nota.
 - **Calibrar**: aparecen tres manijas. El punto celeste (0 m) se arrastra hasta la cumbre, el punto verde (500 m) fija la escala y el rectángulo rojo es la región de interés para incandescencia. También se pueden escribir los valores en el panel Calibración.
-- **Zona**: muestra u oculta el recuadro de la región de interés, también con la tecla Z. La máscara permite ver qué píxeles cuentan para el índice y ajustar el umbral de brillo. Debajo, un gráfico muestra el índice de las últimas 6 horas con el umbral de alerta; al pasar el mouse se lee la hora local, la hora UTC y el valor de cada muestra. La casilla «registrar» activa el muestreo automático.
+- **Detección**: muestra u oculta el recuadro de la región de interés, también con la tecla Z. La máscara permite ver qué píxeles cuentan para el índice y ajustar el umbral de brillo. Debajo, un gráfico muestra el índice de las últimas 6 horas con el umbral de alerta; al pasar el mouse se lee la hora local, la hora UTC y el valor de cada muestra. La casilla «registrar» activa el muestreo automático.
+- **Marco**: muestra u oculta el borde de la región de interés sobre la imagen, también con la tecla R. En modo Calibrar el marco se ve siempre.
 - **Criterios del índice**: un píxel cuenta si es rojizo, es decir brillante y con dominante roja, o si su luminancia supera el umbral de brillo, que por defecto es 200 en una escala de 0 a 255. De noche la cámara transmite en blanco y negro, así que solo actúa el criterio de brillo. De día, la nieve muy iluminada puede superar el umbral; la luminancia del cuadro, registrada en cada muestra, permite separar día y noche.
 - **Noche**: en el panel lateral se activa el muestreo automático para calcular el índice cada N segundos. Cuando supera el umbral, la lectura se marca en rojo. Los presets de brillo y contraste solo afectan la visualización, no el análisis.
 
