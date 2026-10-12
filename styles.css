@@ -71,6 +71,11 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--texto); fon
 .inserto-info { margin: 6px 0 0; font-size: 0.8rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
 .inserto-info strong { color: var(--acento-2); }
 .inserto.alerta .inserto-info strong { color: var(--peligro); }
+.inserto-mancha { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.inserto-mancha .inserto-info { width: auto; flex: 1; margin-top: 3px; }
+.inserto-mancha strong { color: rgb(0, 229, 255); }
+.boton.chico { padding: 3px 8px; font-size: 0.75rem; margin-top: 3px; white-space: nowrap; }
+.boton:disabled { opacity: 0.45; cursor: default; }
 .inserto-graf { margin-top: 8px; }
 .inserto-graf-cab { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: var(--texto-suave); margin-bottom: 3px; }
 label.chica { font-size: 0.75rem; gap: 4px; }

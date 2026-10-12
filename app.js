@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-11 i";
+  const VERSION = "2026-10-12 a";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -310,6 +310,53 @@
     return 0;
   }
 
+  // Mancha conectada más grande (vecindad de 8) entre los píxeles
+  // detectados. Se ignoran manchas de menos de MIN_PX_MANCHA píxeles,
+  // que suelen ser ruido del sensor.
+  const MIN_PX_MANCHA = 6;
+  function manchaMayor(clases, w, h) {
+    const visto = new Uint8Array(clases.length), cola = new Int32Array(clases.length);
+    let mejor = null;
+    for (let p0 = 0; p0 < clases.length; p0++) {
+      if (!clases[p0] || visto[p0]) continue;
+      let ini = 0, fin = 0, n = 0, top = h, bot = -1, izq = w, der = -1;
+      cola[fin++] = p0; visto[p0] = 1;
+      while (ini < fin) {
+        const p = cola[ini++], x = p % w, y = (p - x) / w;
+        n++;
+        if (y < top) top = y; if (y > bot) bot = y; if (x < izq) izq = x; if (x > der) der = x;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+          const q = yy * w + xx;
+          if (clases[q] && !visto[q]) { visto[q] = 1; cola[fin++] = q; }
+        }
+      }
+      if (!mejor || n > mejor.n) mejor = { n, top, bot, izq, der };
+    }
+    return mejor && mejor.n >= MIN_PX_MANCHA ? mejor : null;
+  }
+
+  // Convierte la mancha a coordenadas de referencia y a metros con la
+  // calibración: tope sobre la cumbre, alto y ancho. En el plano del cráter
+  // un píxel cubre la misma distancia en horizontal y en vertical.
+  function medirMancha(r) {
+    const m = manchaMayor(r.clases, r.z.w, r.z.h);
+    if (!m) return null;
+    const f = r.z.W / REF_W, c = estado.calib;
+    const ref = (v) => v / f;
+    const topRef = ref(r.z.y + m.top), botRef = ref(r.z.y + m.bot + 1);
+    const izqRef = ref(r.z.x + m.izq), derRef = ref(r.z.x + m.der + 1);
+    const mPorPx = 100 / c.pxPor100m;
+    return {
+      px: m.n, topRef, botRef, izqRef, derRef,
+      topeM: alturaDesdeY(topRef), baseM: alturaDesdeY(botRef),
+      altoM: (botRef - topRef) * mPorPx, anchoM: (derRef - izqRef) * mPorPx,
+      // La mancha toca el borde de la ROI: puede estar recortada.
+      recortada: m.top === 0 || m.izq === 0 || m.bot === r.z.h - 1 || m.der === r.z.w - 1
+    };
+  }
+
   // Rectángulo de la ROI en píxeles del cuadro real.
   function roiEnCuadro() {
     const m = estado.media;
@@ -351,7 +398,9 @@
       clases[p] = c;
       if (c === 1) rojizos++; else if (c === 2) brillantes++;
     }
-    return { z, img, clases, n, rojizos, brillantes, indice: 100 * (rojizos + brillantes) / n, lumRoi: lum / n };
+    const r = { z, img, clases, n, rojizos, brillantes, indice: 100 * (rojizos + brillantes) / n, lumRoi: lum / n };
+    r.mancha = medirMancha(r);
+    return r;
   }
 
   // Luminancia media del cuadro, sobre una copia reducida, para distinguir noche de día.
@@ -371,7 +420,13 @@
   function calcularIndice() {
     const a = analizarRoi();
     if (!a) return null;
-    return { indice: a.indice, lumRoi: a.lumRoi, lumCuadro: luminanciaCuadro(a.z), rojizos: a.rojizos, brillantes: a.brillantes };
+    return { indice: a.indice, lumRoi: a.lumRoi, lumCuadro: luminanciaCuadro(a.z), rojizos: a.rojizos, brillantes: a.brillantes, mancha: a.mancha };
+  }
+
+  function limpiarMancha() {
+    if (estado.mancha) { estado.mancha = null; dibujarOverlay(); }
+    $("roi-mancha").textContent = "";
+    $("btn-usar-tope").disabled = true;
   }
 
   // ---------- Recuadro de la ROI: ampliación y máscara ----------
@@ -382,7 +437,7 @@
     if (caja.hidden) return;
     const zoom = $("roi-zoom"), mascara = $("roi-mascara"), info = $("roi-info");
     const z = roiEnCuadro();
-    if (!z) { info.textContent = estado.tipoMedia === "iframe" ? "No disponible en modo iframe" : "Sin imagen"; return; }
+    if (!z) { info.textContent = estado.tipoMedia === "iframe" ? "No disponible en modo iframe" : "Sin imagen"; limpiarMancha(); return; }
     // Ampliación: se dibuja aunque no haya acceso a píxeles.
     for (const cv of [zoom, mascara]) { cv.width = z.w; cv.height = z.h; }
     const cz = zoom.getContext("2d");
@@ -394,6 +449,7 @@
     if (!r) {
       cm.fillStyle = "#111"; cm.fillRect(0, 0, z.w, z.h);
       info.textContent = "Máscara no disponible: sin acceso a píxeles (CORS)";
+      limpiarMancha();
       return;
     }
     // Máscara: fondo en gris atenuado y píxeles detectados en color.
@@ -410,7 +466,18 @@
     caja.classList.toggle("alerta", alerta);
     info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · rojizos " + r.rojizos + " · brillantes " + r.brillantes +
       " de " + r.n + " px" + (alerta ? " · <strong>INCANDESCENCIA</strong>" : "");
+    const mm = r.mancha;
+    estado.mancha = mm ? Object.assign({ t: Date.now() }, mm) : null;
+    $("roi-mancha").innerHTML = mm
+      ? "Mancha principal: tope <strong>" + fmtM(mm.topeM) + "</strong> sobre la cumbre · alto <strong>" + fmtM(mm.altoM) +
+        "</strong> · ancho <strong>" + fmtM(mm.anchoM) + "</strong> · " + mm.px + " px" + (mm.recortada ? " · <em>toca el borde de la zona</em>" : "")
+      : "Sin mancha detectada";
+    $("btn-usar-tope").disabled = !mm;
+    dibujarOverlay();
   }
+  // Metros redondeados a 5 m: la resolución es de unos 2 m por píxel.
+  function fmtM(v) { return (Math.round(v / 5) * 5 || 0) + " m"; }
+  function fmtTam(v) { return v < 5 ? "< 5 m" : fmtM(v); }
   setInterval(actualizarInserto, 1000);
 
   function muestrear() {
@@ -419,7 +486,9 @@
     estado.ultimoIndice = m.indice;
     const t = new Date();
     estado.muestras.push({ t: t.toISOString(), indice: +m.indice.toFixed(2), lumRoi: +m.lumRoi.toFixed(1), lumCuadro: m.lumCuadro != null ? +m.lumCuadro.toFixed(1) : null,
-      rojizos: m.rojizos, brillantes: m.brillantes, umbralBrillo: estado.ajustes.umbralBrillo });
+      rojizos: m.rojizos, brillantes: m.brillantes, umbralBrillo: estado.ajustes.umbralBrillo,
+      topeInc: m.mancha ? Math.round(m.mancha.topeM) : null, altoInc: m.mancha ? Math.round(m.mancha.altoM) : null,
+      anchoInc: m.mancha ? Math.round(m.mancha.anchoM) : null });
     if (estado.muestras.length > 5000) estado.muestras.splice(0, estado.muestras.length - 5000);
     guardar(LS.muestras, estado.muestras);
     const alerta = m.indice >= estado.ajustes.umbral;
@@ -501,7 +570,8 @@
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
       const t = new Date(p.s.t);
       lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · índice " + p.s.indice.toFixed(2) + " %" +
-        (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "");
+        (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "") +
+        (p.s.topeInc != null ? " · tope " + p.s.topeInc + " m, alto " + p.s.altoInc + " m, ancho " + p.s.anchoInc + " m" : "");
     } else {
       const u = ms[ms.length - 1];
       lect.textContent = "Última: " + fmtLocal.format(new Date(u.t)) + " · " + u.indice.toFixed(2) + " % · " + ms.length + " muestras en 6 h";
@@ -554,7 +624,7 @@
       gm.appendChild(el("line", { x1: 0, y1: y, x2: REF_W, y2: y, "stroke-dasharray": "8 6" }));
       gm.appendChild(el("circle", { cx: c.x, cy: y, r: 6, fill: "#f4a261", stroke: "#000" }));
       const et = el("text", { x: c.x - 18, y: y - 10, "text-anchor": "end", fill: "#f4a261", "font-size": 18, "font-weight": "700",
-        stroke: "rgba(0,0,0,0.8)", "stroke-width": 4, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, Math.round(h / 10) * 10 + " m");
+        stroke: "rgba(0,0,0,0.8)", "stroke-width": 4, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, fmtM(h));
       gm.appendChild(et);
       overlay.appendChild(gm);
     }
@@ -566,6 +636,18 @@
       overlay.appendChild(el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, fill: "none", stroke: "#e5533d",
         "stroke-width": 1.5, "stroke-dasharray": "5 4", "pointer-events": estado.modoUi === "calibrar" ? "all" : "none",
         class: estado.modoUi === "calibrar" ? "arrastrable" : "", "data-manija": "roi" }));
+    }
+    const mm = estado.mancha;
+    if (mm && estado.ajustes.marco !== false && !$("inserto").hidden) {
+      const gm = el("g", { stroke: "rgb(0,229,255)", fill: "none", "stroke-width": 1.2, "pointer-events": "none" });
+      gm.appendChild(el("rect", { x: mm.izqRef, y: mm.topRef, width: mm.derRef - mm.izqRef, height: mm.botRef - mm.topRef }));
+      const xc = Math.max(mm.derRef, r.x + r.w) + 8;
+      gm.appendChild(el("line", { x1: mm.derRef, y1: mm.topRef, x2: xc + 4, y2: mm.topRef, "stroke-dasharray": "3 2" }));
+      gm.appendChild(el("line", { x1: xc, y1: mm.topRef, x2: xc, y2: mm.botRef }));
+      gm.appendChild(el("line", { x1: xc - 3, y1: mm.botRef, x2: xc + 3, y2: mm.botRef }));
+      gm.appendChild(el("text", { x: xc + 7, y: mm.topRef + 4, fill: "rgb(0,229,255)", stroke: "rgba(0,0,0,0.6)", "stroke-width": 2.5,
+        "paint-order": "stroke", "font-size": 13, "font-family": "system-ui, sans-serif" }, "tope " + fmtM(mm.topeM)));
+      overlay.appendChild(gm);
     }
     if (estado.modoUi === "calibrar") {
       overlay.appendChild(el("circle", { cx: c.x, cy: c.y0, r: 10, fill: "#4cc9f0", stroke: "#000", "stroke-width": 2, class: "arrastrable", "data-manija": "base" }));
@@ -583,7 +665,7 @@
   function actualizarLectura() {
     if (estado.marcadorY == null) { lectura.innerHTML = "Altura: <strong>--</strong>"; return; }
     const h = alturaDesdeY(estado.marcadorY);
-    lectura.innerHTML = "Altura: <strong>" + Math.round(h / 10) * 10 + " m</strong> sobre la cumbre";
+    lectura.innerHTML = "Altura: <strong>" + fmtM(h) + "</strong> sobre la cumbre";
   }
 
   function puntoSvg(ev) {
@@ -659,7 +741,7 @@
     if (estado.marcadorY != null) {
       const y = px(estado.marcadorY);
       ctx.setLineDash([8 * f, 6 * f]); trazo(0, y, w, y, 2 * f, "#f4a261"); ctx.setLineDash([]);
-      ctx.textAlign = "right"; texto(Math.round(alturaDesdeY(estado.marcadorY) / 10) * 10 + " m", px(cal.x) - 18 * f, y - 12 * f, "#f4a261"); ctx.textAlign = "left";
+      ctx.textAlign = "right"; texto(fmtM(alturaDesdeY(estado.marcadorY)), px(cal.x) - 18 * f, y - 12 * f, "#f4a261"); ctx.textAlign = "left";
     }
     const ahora = new Date();
     texto("Cámara Tata · " + horaLocal(ahora) + (estado.ultimoIndice != null ? " · índice " + estado.ultimoIndice.toFixed(2) + " %" : ""), 12 * f, h - 16 * f);
@@ -677,7 +759,9 @@
       const idx = estado.registro.length - 1 - i;
       const tr = document.createElement("tr");
       tr.innerHTML = "<td>" + horaLocal(new Date(r.t)) + "</td><td>" + r.tipo + "</td><td class='num'>" + (r.altura != null ? r.altura : "") +
-        "</td><td class='num'>" + (r.indice != null ? r.indice.toFixed(2) : "") + "</td><td>" + escapar(r.nota || "") +
+        "</td><td class='num'>" + (r.indice != null ? r.indice.toFixed(2) : "") +
+        "</td><td class='num'>" + (r.topeInc != null ? r.topeInc : "") + "</td><td class='num'>" + (r.altoInc != null ? r.altoInc : "") +
+        "</td><td class='num'>" + (r.anchoInc != null ? r.anchoInc : "") + "</td><td>" + escapar(r.nota || "") +
         "</td><td><button class='quitar' title='Quitar' data-i='" + idx + "'>✕</button></td>";
       tb.appendChild(tr);
     });
@@ -692,8 +776,11 @@
     const m = estado.ajustes.muestreo || estado.pixelesOk ? calcularIndice() : null;
     estado.registro.push({
       t: new Date().toISOString(), tipo,
-      altura: estado.marcadorY != null && tipo !== "nubosidad" ? Math.round(alturaDesdeY(estado.marcadorY) / 10) * 10 : null,
+      altura: estado.marcadorY != null && tipo !== "nubosidad" ? Math.round(alturaDesdeY(estado.marcadorY)) : null,
       indice: m ? +m.indice.toFixed(2) : null,
+      topeInc: m && m.mancha ? Math.round(m.mancha.topeM) : null,
+      altoInc: m && m.mancha ? Math.round(m.mancha.altoM) : null,
+      anchoInc: m && m.mancha ? Math.round(m.mancha.anchoM) : null,
       nota: $("r-nota").value.trim()
     });
     guardar(LS.registro, estado.registro); renderRegistro(); $("r-nota").value = "";
@@ -704,15 +791,15 @@
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = nombre; a.click();
   }
   $("btn-exp-registro").addEventListener("click", () => {
-    descargarCsv("registro_tata.csv", [["fecha_hora_local", "iso_utc", "tipo", "altura_m", "indice_pct", "nota"]]
-      .concat(estado.registro.map(r => [horaLocal(new Date(r.t)), r.t, r.tipo, r.altura, r.indice, r.nota])));
+    descargarCsv("registro_tata.csv", [["fecha_hora_local", "iso_utc", "tipo", "altura_m", "indice_pct", "tope_incand_m", "alto_incand_m", "ancho_incand_m", "nota"]]
+      .concat(estado.registro.map(r => [horaLocal(new Date(r.t)), r.t, r.tipo, r.altura, r.indice, r.topeInc, r.altoInc, r.anchoInc, r.nota])));
   });
   $("btn-borrar-registro").addEventListener("click", () => {
     if (confirm("¿Borrar todo el registro de observaciones de este navegador?")) { estado.registro = []; guardar(LS.registro, []); renderRegistro(); }
   });
   $("btn-exp-muestras").addEventListener("click", () => {
-    descargarCsv("muestras_incandescencia.csv", [["fecha_hora_local", "iso_utc", "indice_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo"]]
-      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo])));
+    descargarCsv("muestras_incandescencia.csv", [["fecha_hora_local", "iso_utc", "indice_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo", "tope_incand_m", "alto_incand_m", "ancho_incand_m"]]
+      .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo, s.topeInc, s.altoInc, s.anchoInc])));
   });
   $("btn-borrar-muestras").addEventListener("click", () => {
     if (confirm("¿Borrar las muestras del índice de incandescencia?")) { estado.muestras = []; guardar(LS.muestras, []); dibujarGrafico(); }
@@ -770,6 +857,14 @@
     if (ver) { actualizarInserto(); dibujarGrafico(); }
   }
   $("btn-inserto").addEventListener("click", () => mostrarInserto($("inserto").hidden));
+  // Lleva el marcador de medición al tope sugerido; luego se puede ajustar
+  // en modo Medir antes de registrar.
+  $("btn-usar-tope").addEventListener("click", () => {
+    if (!estado.mancha) return;
+    estado.marcadorY = estado.mancha.topRef;
+    $("r-tipo").value = "incandescencia";
+    dibujarOverlay();
+  });
 
   // Marco de la zona de detección sobre la imagen. En modo Calibrar se
   // muestra siempre, porque es lo que se arrastra.

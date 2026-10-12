@@ -92,25 +92,72 @@ def fuente(tam):
     return ImageFont.load_default()
 
 
+def mancha_mayor(mascara, w, h, minimo=6):
+    """Mancha conectada más grande (vecindad de 8) en una máscara plana.
+
+    Devuelve (n, top, bot, izq, der) en píxeles de la ROI, o None si la
+    mancha más grande tiene menos de `minimo` píxeles.
+    """
+    visto = bytearray(len(mascara))
+    mejor = None
+    for p0, v in enumerate(mascara):
+        if not v or visto[p0]:
+            continue
+        pila = [p0]
+        visto[p0] = 1
+        n, top, bot, izq, der = 0, h, -1, w, -1
+        while pila:
+            p = pila.pop()
+            y, x = divmod(p, w)
+            n += 1
+            top, bot, izq, der = min(top, y), max(bot, y), min(izq, x), max(der, x)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    xx, yy = x + dx, y + dy
+                    if 0 <= xx < w and 0 <= yy < h:
+                        q = yy * w + xx
+                        if mascara[q] and not visto[q]:
+                            visto[q] = 1
+                            pila.append(q)
+        if mejor is None or n > mejor[0]:
+            mejor = (n, top, bot, izq, der)
+    return mejor if mejor and mejor[0] >= minimo else None
+
+
 def indice_incandescencia(im, f):
-    """Porcentaje de píxeles rojizos o brillantes dentro de la ROI."""
+    """Índice (%% de píxeles rojizos o brillantes en la ROI) y medidas de la
+    mancha principal: tope sobre la cumbre, alto y ancho, en metros."""
     x, y = int(ROI["x"] * f), int(ROI["y"] * f)
     w, h = int(ROI["w"] * f), int(ROI["h"] * f)
     roi = im.crop((x, y, x + w, y + h)).convert("RGB")
     px = roi.load()
+    mascara = bytearray(roi.width * roi.height)
     calientes, lum = 0, 0.0
     n = roi.width * roi.height
     for j in range(roi.height):
         for i in range(roi.width):
             R, G, B = px[i, j]
-            lum += 0.299 * R + 0.587 * G + 0.114 * B
+            L = 0.299 * R + 0.587 * G + 0.114 * B
+            lum += L
             # Rojizo (solo en color) o brillante (criterio que cuenta de noche,
             # cuando la cámara transmite en blanco y negro).
-            if (R >= 140 and R > G * 1.25 and R > B * 1.6) or (0.299 * R + 0.587 * G + 0.114 * B >= UMBRAL_BRILLO):
+            if (R >= 140 and R > G * 1.25 and R > B * 1.6) or L >= UMBRAL_BRILLO:
                 calientes += 1
+                mascara[j * roi.width + i] = 1
     gris = im.convert("L").resize((160, max(1, int(160 * im.height / im.width))))
     lum_cuadro = sum(gris.tobytes()) / (gris.width * gris.height)
-    return 100.0 * calientes / n, lum / n, lum_cuadro
+    medidas = None
+    m = mancha_mayor(mascara, roi.width, roi.height)
+    if m:
+        _, top, bot, izq, der = m
+        m_por_px = 100.0 / CALIB["px_por_100m"]
+        top_ref = (y + top) / f
+        medidas = {
+            "tope_m": (CALIB["y0"] - top_ref) * m_por_px,
+            "alto_m": (bot + 1 - top) / f * m_por_px,
+            "ancho_m": (der + 1 - izq) / f * m_por_px,
+        }
+    return 100.0 * calientes / n, lum / n, lum_cuadro, medidas
 
 
 def anotar(im, f, texto):
@@ -181,19 +228,24 @@ def main():
                 descargar(url, crudo)
             im = Image.open(crudo).convert("RGB")
             f = im.width / REF_W
-            idx, lum_roi, lum_cuadro = indice_incandescencia(im, f)
+            idx, lum_roi, lum_cuadro, med = indice_incandescencia(im, f)
             noche = lum_cuadro < 40
             marca = "INCANDESCENCIA" if idx >= a.umbral else ""
             texto = f"Cámara Tata · {t.strftime('%Y-%m-%d %H:%M:%S')} · índice {idx:.2f} % {marca}"
+            if med:
+                texto += f" · tope {med['tope_m']:.0f} m · alto {med['alto_m']:.0f} m · ancho {med['ancho_m']:.0f} m"
             anotar(im, f, texto).save(salida / "cuadros_escala" / f"{nombre}.jpg", quality=90)
             with open(csv_path, "a", newline="", encoding="utf-8") as fh:
                 w = csv.writer(fh, delimiter=";")
                 if nuevo:
-                    w.writerow(["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_roi", "indice_pct", "noche", "incandescencia"])
+                    w.writerow(["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_roi", "indice_pct", "noche", "incandescencia",
+                                "tope_incand_m", "alto_incand_m", "ancho_incand_m"])
                     nuevo = False
                 w.writerow([t.isoformat(timespec="seconds"), crudo.name, im.width, im.height,
-                            f"{lum_cuadro:.1f}", f"{lum_roi:.1f}", f"{idx:.2f}", int(noche), int(idx >= a.umbral)])
-            print(f"{t:%H:%M:%S} {im.width}x{im.height} lum={lum_cuadro:.0f} índice={idx:.2f}% {marca}", flush=True)
+                            f"{lum_cuadro:.1f}", f"{lum_roi:.1f}", f"{idx:.2f}", int(noche), int(idx >= a.umbral)] +
+                           ([f"{med['tope_m']:.0f}", f"{med['alto_m']:.0f}", f"{med['ancho_m']:.0f}"] if med else ["", "", ""]))
+            extra = f" tope={med['tope_m']:.0f}m alto={med['alto_m']:.0f}m ancho={med['ancho_m']:.0f}m" if med else ""
+            print(f"{t:%H:%M:%S} {im.width}x{im.height} lum={lum_cuadro:.0f} índice={idx:.2f}%{extra} {marca}", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{t:%H:%M:%S} error: {e}", file=sys.stderr, flush=True)
         if a.una_vez:
