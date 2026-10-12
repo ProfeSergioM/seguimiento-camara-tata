@@ -3,18 +3,19 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 f";
+  const VERSION = "2026-10-12 g";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
-    calib: "tata.calib.v2",
-    roi: "tata.roi.v2",
-    zonaCol: "tata.zonacol.v1",
+    calib: "tata.calib.v3",
+    roi: "tata.roi.v3",
+    zonaCol: "tata.zonacol.v2",
     silueta: "tata.silueta.v1",
     registro: "tata.registro",
     muestras: "tata.muestras"
   };
-  try { localStorage.removeItem("tata.calib"); localStorage.removeItem("tata.roi"); } catch (e) {}
+  // Claves de calibraciones anteriores, en otros sistemas de referencia.
+  try { ["tata.calib", "tata.roi", "tata.calib.v2", "tata.roi.v2", "tata.zonacol.v1"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
   const REF_W = (CFG.calibracion && CFG.calibracion.refW) || 1920;
 
   // ---------- Estado ----------
@@ -36,9 +37,9 @@
       brillo: 1,
       contraste: 1
     }, leer(LS.ajustes, {})),
-    calib: Object.assign({}, CFG.calibracion || { x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 }, leer(LS.calib, {})),
-    roi: Object.assign({}, CFG.roi || { x: 808, y: 525, w: 120, h: 68 }, leer(LS.roi, {})),
-    zonaCol: Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 }, leer(LS.zonaCol, {})),
+    calib: Object.assign({}, CFG.calibracion || { x: 1030, y0: 526, pxPor100m: 54.1, alturaMax: 800 }, leer(LS.calib, {})),
+    roi: Object.assign({}, CFG.roi || { x: 900, y: 490, w: 200, h: 85 }, leer(LS.roi, {})),
+    zonaCol: Object.assign({}, CFG.zonaColumna || { x: 700, y: 0, w: 1200, h: 560 }, leer(LS.zonaCol, {})),
     modoDet: "incand",        // detector en uso: "incand" (noche) o "ceniza" (día)
     silueta: leer("tata.silueta.v1", null) || CFG.silueta || null,   // [[x, y] | null, ...] en px ref
     registro: leer(LS.registro, []),
@@ -907,7 +908,7 @@
       // esquina de la ROI para redimensionar
       overlay.appendChild(el("rect", { x: r.x + r.w - 7, y: r.y + r.h - 7, width: 14, height: 14, fill: "#e5533d", stroke: "#000", class: "arrastrable", "data-manija": "roi-esq" }));
       overlay.appendChild(el("rect", { x: zc.x + zc.w - 7, y: zc.y + zc.h - 7, width: 14, height: 14, fill: "rgb(232,170,90)", stroke: "#000", class: "arrastrable", "data-manija": "zona-esq" }));
-      overlay.appendChild(el("text", { x: zc.x + 6, y: zc.y + 16, fill: "rgb(232,170,90)", "font-size": 13, stroke: "rgba(0,0,0,0.8)",
+      overlay.appendChild(el("text", { x: zc.x + 6, y: zc.y + zc.h - 8, fill: "rgb(232,170,90)", "font-size": 13, stroke: "rgba(0,0,0,0.8)",
         "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "zona de columna (ceniza)"));
     }
     actualizarLectura();
@@ -1099,7 +1100,7 @@
   });
   $("btn-cal-reset").addEventListener("click", () => {
     estado.calib = Object.assign({}, CFG.calibracion); estado.roi = Object.assign({}, CFG.roi);
-    estado.zonaCol = Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 });
+    estado.zonaCol = Object.assign({}, CFG.zonaColumna || { x: 700, y: 0, w: 1200, h: 560 });
     try { localStorage.removeItem(LS.calib); localStorage.removeItem(LS.roi); localStorage.removeItem(LS.zonaCol); } catch (e) {}
     dibujarOverlay(); llenarCalib();
   });

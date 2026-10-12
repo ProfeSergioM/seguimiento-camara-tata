@@ -82,21 +82,28 @@ La cámara entrega cuadros de 1920 × 1080 px con un lente gran angular. La cali
 
 | Parámetro | Valor | Significado |
 |---|---|---|
-| x | 868.5 | columna de la escala, sobre el cráter |
-| y0 | 565.6 | fila del 0 m, en la cumbre |
+| x | 1030 | columna de la escala, sobre el cráter activo |
+| y0 | 526 | fila del 0 m, en la cresta donde nacen las emisiones |
 | píxeles por 100 m | 54.1 | separación entre marcas |
-| altura máxima | 500 m | extensión de la escala |
-| ROI | 808, 525, 120, 68 | región para el índice de incandescencia |
+| altura máxima | 800 m | extensión de la escala |
+| ROI del cráter | 900, 490, 200, 85 | incandescencia y raíz de la columna de ceniza |
+| zona de columna | 700, 0, 1200, 560 | detección de ceniza de día |
 
-### De dónde salen estos valores
+### Ubicación del cráter activo
+
+Hasta el 12-10-2026 el 0 m estaba en x = 868.5, y = 565.6, el portezuelo entre el cerro oscuro y el macizo nevado. Cuatro observaciones lo desplazaron a la cresta donde nacen las emisiones: el punto brillante nocturno del 11-10, cerca de x = 927, y = 551, y tres emisiones del amanecer del 12-10, cuya base está cerca de x = 1000 a 1070. Sobre la silueta trazada en vivo, esa cresta está en y ≈ 520 a 528. El cambio sube el 0 m unos 40 px, unos 75 m. Las alturas medidas antes de ese día, sobre una columna que nace en esta cresta, quedan unos 75 m por encima de las actuales.
+
+La ROI del cráter cubre tanto la base de las emisiones como el punto brillante nocturno. La zona de columna se amplió hacia la derecha y hacia arriba, porque la columna del 12-10 se inclinó en esa dirección.
+
+### De dónde sale la separación entre marcas
 
 La escala original se dibujó sobre una captura de pantalla de 1393 × 667 px (`docs/calibracion_preliminar.jpg`), con 0 m en la fila 380.5 y 47.5 px entre marcas. Esa captura resultó ser un recorte del cuadro nativo con la dimensión vertical comprimida. Para trasladar la escala se emparejaron 228 puntos homólogos entre la captura y un snapshot nativo (`docs/snapshot_plazatata_1920x1080.jpg`) y se ajustó una transformación afín. El ajuste da una escala horizontal de 1.004, una escala vertical de 1.139, rotación nula y un residuo mediano de 0.43 px. El resultado sobre el cuadro nativo está en `docs/calibracion_cuadro_nativo.jpg`.
 
-Los 47.5 px por 100 m originales se midieron directamente sobre la captura. Por eso la escala debe acompañar al paisaje al trasladarse, y en el cuadro nativo corresponde a 54.1 px por 100 m.
+Los 47.5 px por 100 m originales se midieron directamente sobre la captura. Por eso la escala debe acompañar al paisaje al trasladarse, y en el cuadro nativo corresponde a 54.1 px por 100 m. El 0 m de esa calibración original estaba en el portezuelo; su traslado a la cresta del cráter activo se explica arriba.
 
 ### Supuestos y limitaciones
 
-- La altura se mide sobre la cumbre visible, suponiendo que la columna sube en vertical y en el mismo plano que el cráter. Una columna inclinada por el viento o desplazada hacia la cámara o hacia atrás cambia la escala aparente.
+- La altura se mide sobre la cresta del cráter activo, suponiendo que la columna sube en vertical y en el mismo plano que el cráter. La separación entre marcas se fijó en la calibración original y no se ha verificado a la distancia del cráter activo. Una columna inclinada por el viento o desplazada hacia la cámara o hacia atrás cambia la escala aparente.
 - La escala es lineal. El lente gran angular deforma los bordes del cuadro, pero el cráter está cerca del centro, donde la deformación es menor. Las columnas que superen el cuadro superior de la escala conviene interpretarlas con más cautela.
 - La escala debe verificarse con una referencia de altitud conocida antes de reportar valores. Hasta entonces las alturas son estimaciones.
 - Si la cámara cambia de encuadre o de zoom, la calibración deja de valer y hay que repetirla con el modo Calibrar.
@@ -105,7 +112,7 @@ Los 47.5 px por 100 m originales se midieron directamente sobre la captura. Por 
 
 En las imágenes disponibles, tomadas al atardecer, la cámara deja el cielo, las nubes y la nieve con un tono azulado parejo: el canal rojo queda entre 30 y 60 niveles bajo el azul. La ceniza es gris café, más cálida que lo que la rodea. Como el balance de color cambia con la hora y el clima, el sitio no usa un umbral fijo de color, sino que compara cada píxel con su propio pasado.
 
-1. **Zona de columna.** Se analiza un rectángulo sobre el cráter, por defecto desde unos 20 m bajo la cumbre hasta unos 600 m sobre ella, reducido a 300 píxeles de ancho. Se ajusta en modo Calibrar, arrastrando el rectángulo café, o en el panel Calibración.
+1. **Zona de columna.** Se analiza un rectángulo sobre el cráter, por defecto desde unos 60 m bajo la cresta hasta el borde superior de la imagen, unos 970 m sobre ella, y de x = 700 a 1900. Se reduce a 300 píxeles de ancho, de modo que cada píxel de la máscara cubre unos 4 px de la cámara, unos 7 m. Se ajusta en modo Calibrar, arrastrando el rectángulo café, o en el panel Calibración.
 2. **Fondo adaptativo.** Para cada píxel se mantiene un promedio lento de su tono (R − B) y de su luminancia, con una constante de tiempo de 10 minutos. El terreno, la nieve y el cielo quieto se cancelan.
 3. **Dos señales.** Un píxel cuenta como candidato si se volvió más cálido que su fondo, con un aumento de R − B de al menos 12 niveles, o si se oscureció en al menos 25 niveles. A cada diferencia se le resta la mediana de la zona, para que un cambio general de luz no active la detección. En la máscara, café es más cálido y lila es más oscuro.
 4. **Columna enraizada en el cráter.** La columna es la mancha conectada más grande que toca la ROI del cráter. Su borde superior da el tope sobre la cumbre, y su extensión, el alto y el ancho.

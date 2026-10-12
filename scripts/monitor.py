@@ -56,9 +56,10 @@ except Exception:  # pragma: no cover
 
 # Calibración preliminar en píxeles del cuadro nativo (1920 × 1080 px).
 REF_W = 1920
-CALIB = {"x": 868.5, "y0": 565.6, "px_por_100m": 54.1, "altura_max": 500}
-ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
-ZONA_COLUMNA = {"x": 568, "y": 241, "w": 600, "h": 335}
+# El 0 m está en la cresta donde nacen las emisiones (ver README).
+CALIB = {"x": 1030, "y0": 526, "px_por_100m": 54.1, "altura_max": 800}
+ROI = {"x": 900, "y": 490, "w": 200, "h": 85}
+ZONA_COLUMNA = {"x": 700, "y": 0, "w": 1200, "h": 560}
 # Recorte para VIGIA-PlumeNet. El modelo trabaja en una grilla de 37 × 37
 # celdas sobre su entrada de 518 × 518 px; con el cuadro completo cada celda
 # cubre unos 52 × 29 px de la cámara. Con la emisión real del 12-10-2026 el

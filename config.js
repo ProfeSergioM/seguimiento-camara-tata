@@ -26,17 +26,22 @@ window.CAM_CONFIG = {
   // (snapshot de 1920 × 1080 px). Se reescala si el video llega con otra
   // resolución.
   //   x         : columna de la escala (vertical sobre el cráter)
-  //   y0        : fila del 0 m (cumbre / borde del cráter)
+  //   y0        : fila del 0 m (borde del cráter activo)
   //   pxPor100m : píxeles por cada 100 m de altura
   //   alturaMax : extensión de la escala, en metros
-  // Valores trasladados desde la captura de calibración original
-  // (docs/calibracion_preliminar.jpg) mediante un ajuste afín con 228
-  // puntos homólogos; ver README, sección Calibración.
-  calibracion: { refW: 1920, x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 },
+  // La separación entre marcas viene de la captura de calibración original
+  // (docs/calibracion_preliminar.jpg), trasladada al cuadro nativo con un
+  // ajuste afín de 228 puntos homólogos. El 0 m se movió el 12-10-2026 a
+  // la cresta donde nacen las emisiones (x = 1030, sobre la silueta); antes
+  // estaba en el portezuelo de x = 868.5, y = 565.6. Ver README.
+  calibracion: { refW: 1920, x: 1030, y0: 526, pxPor100m: 54.1, alturaMax: 800 },
 
-  // Región de interés para el índice de incandescencia nocturna, en los
-  // mismos píxeles del cuadro nativo (rectángulo sobre el cráter).
-  roi: { x: 808, y: 525, w: 120, h: 68 },
+  // Región de interés del cráter, en los mismos píxeles del cuadro nativo.
+  // Sirve para el índice de incandescencia nocturna y para exigir que una
+  // columna de ceniza nazca en el cráter. Cubre la base de las emisiones del
+  // 12-10-2026 (x ≈ 1000 a 1070) y el punto brillante nocturno del 11-10
+  // (x ≈ 927, y ≈ 551).
+  roi: { x: 900, y: 490, w: 200, h: 85 },
 
   // Umbral del índice de incandescencia (% de píxeles "calientes" en la
   // ROI) a partir del cual se marca actividad.
@@ -58,7 +63,7 @@ window.CAM_CONFIG = {
   //   umbralCeniza  : % de píxeles de la zona para marcar posible emisión
   //   umbralCalidez : aumento mínimo de R − B de un píxel sobre su fondo
   //   umbralOscuro  : baja mínima de luminancia de un píxel bajo su fondo
-  zonaColumna: { x: 568, y: 241, w: 600, h: 335 },
+  zonaColumna: { x: 700, y: 0, w: 1200, h: 560 },
   umbralCeniza: 1,
   umbralCalidez: 12,
   umbralOscuro: 25,

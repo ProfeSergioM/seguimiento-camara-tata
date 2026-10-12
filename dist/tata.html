@@ -261,8 +261,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
         <label>Fila del 0 m y0 (px ref) <input id="cal-y0" type="number" step="0.5"></label>
         <label>Píxeles por 100 m <input id="cal-px" type="number" step="0.1"></label>
         <label>Altura máxima (m) <input id="cal-max" type="number" step="100"></label>
-        <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="808, 525, 120, 68"></label>
-        <label>Zona de columna para ceniza x, y, ancho, alto (px ref) <input id="cal-zona" placeholder="568, 241, 600, 335"></label>
+        <label>ROI incandescencia x, y, ancho, alto (px ref) <input id="cal-roi" placeholder="900, 490, 200, 85"></label>
+        <label>Zona de columna para ceniza x, y, ancho, alto (px ref) <input id="cal-zona" placeholder="700, 0, 1200, 560"></label>
         <div class="acciones">
           <button class="boton primario" id="btn-cal-aplicar">Aplicar</button>
           <button class="boton" id="btn-cal-reset">Volver a la preliminar</button>
@@ -377,17 +377,22 @@ window.CAM_CONFIG = {
   // (snapshot de 1920 × 1080 px). Se reescala si el video llega con otra
   // resolución.
   //   x         : columna de la escala (vertical sobre el cráter)
-  //   y0        : fila del 0 m (cumbre / borde del cráter)
+  //   y0        : fila del 0 m (borde del cráter activo)
   //   pxPor100m : píxeles por cada 100 m de altura
   //   alturaMax : extensión de la escala, en metros
-  // Valores trasladados desde la captura de calibración original
-  // (docs/calibracion_preliminar.jpg) mediante un ajuste afín con 228
-  // puntos homólogos; ver README, sección Calibración.
-  calibracion: { refW: 1920, x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 },
+  // La separación entre marcas viene de la captura de calibración original
+  // (docs/calibracion_preliminar.jpg), trasladada al cuadro nativo con un
+  // ajuste afín de 228 puntos homólogos. El 0 m se movió el 12-10-2026 a
+  // la cresta donde nacen las emisiones (x = 1030, sobre la silueta); antes
+  // estaba en el portezuelo de x = 868.5, y = 565.6. Ver README.
+  calibracion: { refW: 1920, x: 1030, y0: 526, pxPor100m: 54.1, alturaMax: 800 },
 
-  // Región de interés para el índice de incandescencia nocturna, en los
-  // mismos píxeles del cuadro nativo (rectángulo sobre el cráter).
-  roi: { x: 808, y: 525, w: 120, h: 68 },
+  // Región de interés del cráter, en los mismos píxeles del cuadro nativo.
+  // Sirve para el índice de incandescencia nocturna y para exigir que una
+  // columna de ceniza nazca en el cráter. Cubre la base de las emisiones del
+  // 12-10-2026 (x ≈ 1000 a 1070) y el punto brillante nocturno del 11-10
+  // (x ≈ 927, y ≈ 551).
+  roi: { x: 900, y: 490, w: 200, h: 85 },
 
   // Umbral del índice de incandescencia (% de píxeles "calientes" en la
   // ROI) a partir del cual se marca actividad.
@@ -409,7 +414,7 @@ window.CAM_CONFIG = {
   //   umbralCeniza  : % de píxeles de la zona para marcar posible emisión
   //   umbralCalidez : aumento mínimo de R − B de un píxel sobre su fondo
   //   umbralOscuro  : baja mínima de luminancia de un píxel bajo su fondo
-  zonaColumna: { x: 568, y: 241, w: 600, h: 335 },
+  zonaColumna: { x: 700, y: 0, w: 1200, h: 560 },
   umbralCeniza: 1,
   umbralCalidez: 12,
   umbralOscuro: 25,
@@ -432,18 +437,19 @@ window.CAM_CONFIG = {
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 f";
+  const VERSION = "2026-10-12 g";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
-    calib: "tata.calib.v2",
-    roi: "tata.roi.v2",
-    zonaCol: "tata.zonacol.v1",
+    calib: "tata.calib.v3",
+    roi: "tata.roi.v3",
+    zonaCol: "tata.zonacol.v2",
     silueta: "tata.silueta.v1",
     registro: "tata.registro",
     muestras: "tata.muestras"
   };
-  try { localStorage.removeItem("tata.calib"); localStorage.removeItem("tata.roi"); } catch (e) {}
+  // Claves de calibraciones anteriores, en otros sistemas de referencia.
+  try { ["tata.calib", "tata.roi", "tata.calib.v2", "tata.roi.v2", "tata.zonacol.v1"].forEach(k => localStorage.removeItem(k)); } catch (e) {}
   const REF_W = (CFG.calibracion && CFG.calibracion.refW) || 1920;
 
   // ---------- Estado ----------
@@ -465,9 +471,9 @@ window.CAM_CONFIG = {
       brillo: 1,
       contraste: 1
     }, leer(LS.ajustes, {})),
-    calib: Object.assign({}, CFG.calibracion || { x: 868.5, y0: 565.6, pxPor100m: 54.1, alturaMax: 500 }, leer(LS.calib, {})),
-    roi: Object.assign({}, CFG.roi || { x: 808, y: 525, w: 120, h: 68 }, leer(LS.roi, {})),
-    zonaCol: Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 }, leer(LS.zonaCol, {})),
+    calib: Object.assign({}, CFG.calibracion || { x: 1030, y0: 526, pxPor100m: 54.1, alturaMax: 800 }, leer(LS.calib, {})),
+    roi: Object.assign({}, CFG.roi || { x: 900, y: 490, w: 200, h: 85 }, leer(LS.roi, {})),
+    zonaCol: Object.assign({}, CFG.zonaColumna || { x: 700, y: 0, w: 1200, h: 560 }, leer(LS.zonaCol, {})),
     modoDet: "incand",        // detector en uso: "incand" (noche) o "ceniza" (día)
     silueta: leer("tata.silueta.v1", null) || CFG.silueta || null,   // [[x, y] | null, ...] en px ref
     registro: leer(LS.registro, []),
@@ -1336,7 +1342,7 @@ window.CAM_CONFIG = {
       // esquina de la ROI para redimensionar
       overlay.appendChild(el("rect", { x: r.x + r.w - 7, y: r.y + r.h - 7, width: 14, height: 14, fill: "#e5533d", stroke: "#000", class: "arrastrable", "data-manija": "roi-esq" }));
       overlay.appendChild(el("rect", { x: zc.x + zc.w - 7, y: zc.y + zc.h - 7, width: 14, height: 14, fill: "rgb(232,170,90)", stroke: "#000", class: "arrastrable", "data-manija": "zona-esq" }));
-      overlay.appendChild(el("text", { x: zc.x + 6, y: zc.y + 16, fill: "rgb(232,170,90)", "font-size": 13, stroke: "rgba(0,0,0,0.8)",
+      overlay.appendChild(el("text", { x: zc.x + 6, y: zc.y + zc.h - 8, fill: "rgb(232,170,90)", "font-size": 13, stroke: "rgba(0,0,0,0.8)",
         "stroke-width": 3, "paint-order": "stroke", "font-family": "system-ui, sans-serif" }, "zona de columna (ceniza)"));
     }
     actualizarLectura();
@@ -1528,7 +1534,7 @@ window.CAM_CONFIG = {
   });
   $("btn-cal-reset").addEventListener("click", () => {
     estado.calib = Object.assign({}, CFG.calibracion); estado.roi = Object.assign({}, CFG.roi);
-    estado.zonaCol = Object.assign({}, CFG.zonaColumna || { x: 568, y: 241, w: 600, h: 335 });
+    estado.zonaCol = Object.assign({}, CFG.zonaColumna || { x: 700, y: 0, w: 1200, h: 560 });
     try { localStorage.removeItem(LS.calib); localStorage.removeItem(LS.roi); localStorage.removeItem(LS.zonaCol); } catch (e) {}
     dibujarOverlay(); llenarCalib();
   });
