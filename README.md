@@ -153,6 +153,23 @@ Opciones principales:
 
 En un computador común, cada captura toma menos de un segundo de cálculo.
 
+## VIGIA-PlumeNet (opcional)
+
+[VIGIA-PlumeNet](https://gricad-gitlab.univ-grenoble-alpes.fr/giffards/vigia-plumenet) (Giffard-Roisin y colegas, Volcanica, 2026) es un modelo basado en DINOv2 que segmenta imágenes RGB de cámaras de volcanes en seis clases: fondo, columna eruptiva, terreno, emisión de ceniza, emisión sin ceniza y lava. Este repositorio no incluye el modelo ni su código; `scripts/plumenet.py` carga el modelo *traced* que cada usuario descarga desde [Hugging Face](https://huggingface.co/SophieGif/VIGIA-PlumeNet) y aplica el mismo preprocesamiento que el script de evaluación original. También hay un [demo en línea](https://mounts-observatory.org/vigianet/).
+
+```bash
+pip install torch numpy pillow
+python3 scripts/plumenet.py segmentar --modelo VIGIAPlumeNet_traced_Dinov2_s14reg_6classes.pt --imagen foto.jpg
+python3 scripts/plumenet.py silueta --modelo VIGIAPlumeNet_traced_Dinov2_s14reg_6classes.pt --imagen foto_despejada.jpg
+python3 scripts/monitor.py --alias plazatata --intervalo 1 --plumenet VIGIAPlumeNet_traced_Dinov2_s14reg_6classes.pt --mascaras
+```
+
+En el script de monitoreo, el modelo analiza un recorte alrededor del volcán (`--pn-recorte`) e informa el porcentaje de ceniza y de gas y el tope de cada columna que toca el cráter, en columnas del CSV que empiezan con `pn_`.
+
+Conviene tener presente la resolución. El modelo trabaja en una grilla de 37 × 37 celdas sobre su entrada de 518 × 518 px. Con el cuadro completo, cada celda cubre unos 52 × 29 px de la cámara, unos 95 × 55 m en el plano del cráter; con el recorte por defecto, unos 24 × 14 px. Por eso el modelo sirve para clasificar la emisión, ceniza o gas, más que para medir su borde. Para la silueta, el trazado por color del sitio es más preciso con cielo despejado.
+
+Estado: la integración está escrita según el código del repositorio original, pero todavía no se ha probado con los pesos reales.
+
 ## Notas técnicas
 
 - Las URLs de IPCamLive usadas son las del reproductor público: `player.php?alias=`, `snapshot.php?alias=` y `getcamerastreamstate.php?alias=`. Esta última devuelve `details.address` y `details.streamid`, con los que se arma `<address>streams/<streamid>/stream.m3u8`. La URL del stream cambia de vez en cuando, por eso se consulta en cada conexión. Si IPCamLive cambia su API, basta con pegar la URL HLS o de snapshot directa en el panel Fuente.

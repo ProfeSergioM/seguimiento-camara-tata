@@ -15,6 +15,12 @@ Es el mismo método que usa el sitio. El fondo de la detección de ceniza se
 guarda en la carpeta de salida, así que sobrevive a un reinicio del
 script. Los resultados se acumulan en un CSV.
 
+Con --plumenet MODELO.pt se agrega la segmentación de VIGIA-PlumeNet
+(ver scripts/plumenet.py) sobre un recorte alrededor del volcán: clasifica
+cada zona en columna eruptiva, ceniza, gas, terreno, lava o fondo, y se
+informan el porcentaje de ceniza y de gas y el tope de cada columna que
+toca el cráter. Requiere torch y numpy.
+
 Requisitos: Python 3.8+, Pillow (pip install pillow). Para el modo HLS se
 necesita ffmpeg en el PATH.
 
@@ -23,6 +29,7 @@ Ejemplos:
     python3 scripts/monitor.py --alias plazatata --intervalo 1 --mascaras
     python3 scripts/monitor.py --alias plazatata --modo hls --intervalo 2 --salida datos
     python3 scripts/monitor.py --snapshot-url https://.../snapshot.jpg --una-vez
+    python3 scripts/monitor.py --alias plazatata --intervalo 1 --plumenet VIGIAPlumeNet_traced_Dinov2_s14reg_6classes.pt
 """
 import argparse
 import array
@@ -52,6 +59,11 @@ REF_W = 1920
 CALIB = {"x": 868.5, "y0": 565.6, "px_por_100m": 54.1, "altura_max": 500}
 ROI = {"x": 808, "y": 525, "w": 120, "h": 68}
 ZONA_COLUMNA = {"x": 568, "y": 241, "w": 600, "h": 335}
+# Recorte para VIGIA-PlumeNet. El modelo trabaja en una grilla de 37 × 37
+# celdas sobre su entrada de 518 × 518 px; con el cuadro completo cada celda
+# cubre unos 52 × 29 px de la cámara. Un recorte alrededor del volcán afina
+# esa grilla (con este recorte, unos 24 × 14 px por celda).
+RECORTE_PN = {"x": 468, "y": 200, "w": 900, "h": 506}
 UMBRAL_BRILLO = 200
 ANCHO_CENIZA = 300          # ancho de la zona de columna reducida, en píxeles
 # Día o noche según la luminosidad del cielo (40 % superior del cuadro), no
@@ -377,7 +389,34 @@ def anotar(im, f, texto, modo, medidas):
 CABECERA = ["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_cielo", "colorido", "detector",
             "indice_incand_pct", "lum_roi", "incandescencia", "tope_incand_m", "alto_incand_m", "ancho_incand_m",
             "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "posible_emision", "edad_fondo_min",
-            "tope_columna_m", "alto_columna_m", "ancho_columna_m"]
+            "tope_columna_m", "alto_columna_m", "ancho_columna_m",
+            "pn_ceniza_pct", "pn_gas_pct", "pn_tope_ceniza_m", "pn_tope_gas_m", "pn_confianza_media"]
+
+
+def analizar_plumenet(modelo, im, f):
+    """Segmenta el recorte alrededor del volcán con VIGIA-PlumeNet. Devuelve
+    porcentajes de ceniza (columna eruptiva más emisión de ceniza) y de gas
+    en el recorte, y el tope de cada columna que toca la ROI del cráter.
+    Como la grilla del modelo es gruesa, la ROI se amplía en una celda."""
+    import plumenet as pn
+    rx, ry = int(RECORTE_PN["x"] * f), int(RECORTE_PN["y"] * f)
+    rw = min(im.width - rx, int(RECORTE_PN["w"] * f))
+    rh = min(im.height - ry, int(RECORTE_PN["h"] * f))
+    recorte = im.crop((rx, ry, rx + rw, ry + rh))
+    clases, confianza = modelo.segmentar(recorte)
+    # Máscaras reducidas a la mitad: la grilla del modelo es más gruesa que eso.
+    red = clases[::2, ::2]
+    hm, wm = red.shape
+    celda_x, celda_y = rw / 37.0, rh / 37.0
+    caja = ((ROI["x"] * f - rx - celda_x) / 2, (ROI["y"] * f - ry - celda_y) / 2,
+            ((ROI["x"] + ROI["w"]) * f - rx + celda_x) / 2, ((ROI["y"] + ROI["h"]) * f - ry + celda_y) / 2)
+    res = {"clases": clases, "recorte": recorte, "confianza": float(confianza.mean())}
+    for nombre, valores in (("ceniza", (pn.COLUMNA, pn.CENIZA)), ("gas", (pn.GAS,))):
+        mascara = bytearray(((red == valores[0]) | (red == valores[-1])).astype("uint8").tobytes())
+        res[nombre + "_pct"] = 100.0 * sum(mascara) / len(mascara)
+        m = mancha_mayor(mascara, wm, hm, caja=caja)
+        res[nombre + "_medidas"] = medir_en_metros(m, rx, ry, 2, 2, f, wm, hm) if m else None
+    return res
 
 
 def preparar_csv(ruta):
@@ -417,6 +456,9 @@ def main():
     ap.add_argument("--tau-fondo", type=float, default=600, help="constante de tiempo del fondo de ceniza, en segundos")
     ap.add_argument("--zona", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="sobrescribe la zona de columna para ceniza")
     ap.add_argument("--mascaras", action="store_true", help="guarda la máscara de detección de cada captura")
+    ap.add_argument("--plumenet", default="", help="modelo traced (.pt) de VIGIA-PlumeNet; activa su segmentación")
+    ap.add_argument("--pn-recorte", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="recorte para VIGIA-PlumeNet, en px de referencia")
+    ap.add_argument("--pn-dispositivo", default="cpu", help="cpu o cuda para VIGIA-PlumeNet")
     ap.add_argument("--calib", nargs=3, type=float, metavar=("X", "Y0", "PX100"), help="sobrescribe x, y0, px por 100 m")
     ap.add_argument("--roi", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="sobrescribe la ROI")
     ap.add_argument("--una-vez", action="store_true", help="captura una sola vez y termina")
@@ -430,6 +472,13 @@ def main():
         ROI.update(x=a.roi[0], y=a.roi[1], w=a.roi[2], h=a.roi[3])
     if a.zona:
         ZONA_COLUMNA.update(x=a.zona[0], y=a.zona[1], w=a.zona[2], h=a.zona[3])
+    if a.pn_recorte:
+        RECORTE_PN.update(x=a.pn_recorte[0], y=a.pn_recorte[1], w=a.pn_recorte[2], h=a.pn_recorte[3])
+    modelo_pn = None
+    if a.plumenet:
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        from plumenet import PlumeNet
+        modelo_pn = PlumeNet(a.plumenet, a.pn_dispositivo)
     if not (a.alias or a.snapshot_url or a.hls_url):
         ap.error("indique --alias, --snapshot-url o --hls-url")
 
@@ -493,7 +542,16 @@ def main():
                 texto += " INCANDESCENCIA" if alerta_inc else ""
                 if mi:
                     texto += f" · tope {mi['tope_m']:.0f} m · alto {mi['alto_m']:.0f} m · ancho {mi['ancho_m']:.0f} m"
+            pn_res = None
+            if modelo_pn is not None:
+                pn_res = analizar_plumenet(modelo_pn, im, f)
+                tc, tg = pn_res["ceniza_medidas"], pn_res["gas_medidas"]
+                texto += f" · PlumeNet: ceniza {pn_res['ceniza_pct']:.1f} %" + (f" tope {tc['tope_m']:.0f} m" if tc else "")
+                texto += f", gas {pn_res['gas_pct']:.1f} %" + (f" tope {tg['tope_m']:.0f} m" if tg else "")
             anotar(im, f, texto, modo, mc if modo == "ceniza" else mi).save(salida / "cuadros_escala" / f"{nombre}.jpg", quality=90)
+            if pn_res is not None and a.mascaras:
+                import plumenet as pn
+                pn.imagen_clases(pn_res["clases"], pn_res["recorte"]).save(salida / "mascaras" / f"{nombre}_plumenet.png")
             if a.mascaras:
                 res = cen if modo == "ceniza" else inc
                 imagen_mascara(res, modo, 2 if modo == "ceniza" else 3).save(salida / "mascaras" / f"{nombre}_{modo}.png")
@@ -505,7 +563,11 @@ def main():
                     fmt(mi and mi["tope_m"]), fmt(mi and mi["alto_m"]), fmt(mi and mi["ancho_m"]),
                     fmt(cen and cen["indice"], 2), "" if not cen else cen["calidos"], "" if not cen else cen["oscuros"],
                     "" if not cen else int(alerta_cen), fmt(cen and cen["edad_fondo_s"] / 60, 1),
-                    fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"])])
+                    fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"])] +
+                    ([fmt(pn_res["ceniza_pct"], 2), fmt(pn_res["gas_pct"], 2),
+                      fmt(pn_res["ceniza_medidas"] and pn_res["ceniza_medidas"]["tope_m"]),
+                      fmt(pn_res["gas_medidas"] and pn_res["gas_medidas"]["tope_m"]), fmt(pn_res["confianza"], 2)]
+                     if pn_res is not None else ["", "", "", "", ""]))
             print(f"{t:%H:%M:%S} {im.width}x{im.height} cielo={lum_cielo:.0f} color={colorido:.1f} → {texto.split(' · ', 2)[-1]}", flush=True)
         except Exception as e:  # noqa: BLE001
             print(f"{t:%H:%M:%S} error: {e}", file=sys.stderr, flush=True)
