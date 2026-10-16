@@ -907,8 +907,8 @@
     overlay.innerHTML = "";
     // Escala sutil: líneas finas y semitransparentes con un halo oscuro leve
     // para que se lea sobre nieve o cielo sin tapar la columna.
-    const g = el("g", { "font-family": "system-ui, sans-serif", "font-size": 13, "fill": "rgba(255,255,255,0.78)",
-      "stroke-linecap": "round", "paint-order": "stroke", "stroke": "rgba(0,0,0,0.45)", "stroke-width": 2.5 });
+    const g = el("g", { "font-family": "system-ui, sans-serif", "font-size": 24, "font-weight": 600, "fill": "rgba(255,255,255,0.92)",
+      "stroke-linecap": "round", "paint-order": "stroke", "stroke": "rgba(0,0,0,0.6)", "stroke-width": 4 });
     const yTop = yDesdeAltura(c.alturaMax);
     const linea = (x1, y1, x2, y2, w) => {
       g.appendChild(el("line", { x1, y1, x2, y2, stroke: "rgba(0,0,0,0.3)", "stroke-width": w + 1.5 }));
@@ -918,7 +918,7 @@
     for (let h = 0; h <= c.alturaMax + 1e-6; h += 100) {
       const y = yDesdeAltura(h);
       linea(c.x - 7, y, c.x + 7, y, 1.2);
-      g.appendChild(el("text", { x: c.x + 11, y: y + 4.5 }, String(h)));
+      g.appendChild(el("text", { x: c.x + 14, y: y + 8.5 }, h >= c.alturaMax - 1e-6 ? h + " m" : String(h)));
     }
     for (let h = 50; h < c.alturaMax; h += 100) {
       const y = yDesdeAltura(h);
@@ -1076,7 +1076,7 @@
     if (!c) { alert("No hay cuadro capturable en este modo. Use HLS o snapshot."); return; }
     const { ctx, w, h } = c, f = w / REF_W, cal = estado.calib;
     const px = (v) => v * f;
-    ctx.lineCap = "round"; ctx.font = "bold " + Math.round(16 * f) + "px sans-serif"; ctx.textBaseline = "middle";
+    ctx.lineCap = "round"; ctx.font = "600 " + Math.round(24 * f) + "px sans-serif"; ctx.textBaseline = "middle";
     const trazo = (x1, y1, x2, y2, ancho, color) => { ctx.strokeStyle = color; ctx.lineWidth = ancho; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
     const texto = (t, x, y, color) => { ctx.lineWidth = 4 * f; ctx.strokeStyle = "rgba(0,0,0,0.8)"; ctx.strokeText(t, x, y); ctx.fillStyle = color || "#fff"; ctx.fillText(t, x, y); };
     const yTop = yDesdeAltura(cal.alturaMax);
@@ -1086,7 +1086,7 @@
       const y = px(yDesdeAltura(hh));
       trazo(px(cal.x) - 7 * f, y, px(cal.x) + 7 * f, y, 2.7 * f, "rgba(0,0,0,0.3)");
       trazo(px(cal.x) - 7 * f, y, px(cal.x) + 7 * f, y, 1.2 * f, "rgba(255,255,255,0.7)");
-      texto(String(hh), px(cal.x) + 11 * f, y, "rgba(255,255,255,0.85)");
+      texto(hh >= cal.alturaMax - 1e-6 ? hh + " m" : String(hh), px(cal.x) + 14 * f, y, "rgba(255,255,255,0.92)");
     }
     if (estado.marcadorY != null) {
       const y = px(estado.marcadorY);

@@ -383,6 +383,7 @@ def anotar(im, f, texto, modo, medidas):
     d = ImageDraw.Draw(im)
     fn = fuente(max(12, int(16 * f)))
     fn_chica = fuente(max(11, int(13 * f)))
+    fn_escala = fuente(max(14, int(24 * f)))
     x = CALIB["x"] * f
     y_de = lambda h: (CALIB["y0"] - h / 100.0 * CALIB["px_por_100m"]) * f
     y0, ytop = y_de(0), y_de(CALIB["altura_max"])
@@ -392,8 +393,8 @@ def anotar(im, f, texto, modo, medidas):
     while h <= CALIB["altura_max"]:
         y = y_de(h)
         d.line([(x - 7 * f, y), (x + 7 * f, y)], fill=(235, 235, 235), width=max(1, int(1.2 * f)))
-        d.text((x + 11 * f, y), str(h), fill=(235, 235, 235), font=fn_chica, anchor="lm",
-               stroke_width=max(1, int(2 * f)), stroke_fill=(0, 0, 0))
+        d.text((x + 14 * f, y), f"{h} m" if h + 100 > CALIB["altura_max"] else str(h), fill=(235, 235, 235), font=fn_escala,
+               anchor="lm", stroke_width=max(2, int(3 * f)), stroke_fill=(0, 0, 0))
         h += 100
     if modo == "ceniza":
         z = ZONA_COLUMNA
