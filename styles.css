@@ -90,7 +90,10 @@ label.boton { display: inline-flex; align-items: center; color: var(--texto); fo
 .inserto.alerta .inserto-info strong { color: var(--peligro); }
 .inserto-mancha { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .inserto-mancha .inserto-info { width: auto; flex: 1; margin-top: 3px; }
-.inserto-mancha strong { color: rgb(0, 229, 255); }
+.inserto-mancha .inserto-info { cursor: help; }
+.inserto-info .edad { color: var(--texto-suave); font-size: 0.9em; }
+.inserto .vap, .inserto .vap strong, .medida-fija .vap strong { color: rgb(170, 225, 255); }
+.medida-fija .cen strong { color: rgb(232, 170, 90); }
 .boton.chico { padding: 3px 8px; font-size: 0.75rem; margin-top: 3px; white-space: nowrap; }
 .boton:disabled { opacity: 0.45; cursor: default; }
 .inserto-graf { margin-top: 8px; }
@@ -101,6 +104,18 @@ label.chica input { margin: 0; }
   border-radius: 4px; cursor: crosshair; }
 .graf-lectura { margin: 3px 0 0; min-height: 1.2em; font-size: 0.75rem; color: var(--texto-suave); font-variant-numeric: tabular-nums; }
 .boton.icono.chico { min-width: 26px; padding: 3px 6px; font-size: 0.8rem; }
+
+/* ---------- Menú de capas ---------- */
+.capas { position: relative; }
+.menu-capas { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 250px; padding: 8px 10px; display: flex;
+  flex-direction: column; gap: 8px; background: rgba(15, 20, 25, 0.97); border: 1px solid var(--borde); border-radius: var(--radio);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+.menu-capas[hidden] { display: none; }
+.menu-capas label { color: var(--texto); font-size: 0.9rem; cursor: pointer; }
+.menu-capas kbd { margin-left: auto; font-size: 0.75rem; color: var(--texto-suave); border: 1px solid var(--borde); border-radius: 4px; padding: 0 5px; }
+details.avanzado { border-top: 1px solid var(--borde); padding-top: 6px; }
+details.avanzado > summary { cursor: pointer; color: var(--texto-suave); font-size: 0.85rem; }
+details.avanzado .campos { padding: 8px 0 0; }
 
 /* ---------- Botones y formularios ---------- */
 .boton { background: rgba(23, 29, 36, 0.85); color: var(--texto); border: 1px solid var(--borde); border-radius: var(--radio); padding: 7px 12px;

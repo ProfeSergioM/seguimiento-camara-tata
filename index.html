@@ -36,10 +36,16 @@
     </div>
     <div class="grupo">
       <button class="boton" id="btn-registrar" title="Guardar la observación en el registro">Registrar</button>
-      <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar PNG</button>
-      <button class="boton" id="btn-inserto" title="Mostrar u ocultar el recuadro de detección de incandescencia (tecla Z)">Detección</button>
-      <button class="boton" id="btn-silueta" title="Mostrar u ocultar la silueta del volcán (tecla S)">Silueta</button>
-      <button class="boton" id="btn-marco" title="Mostrar u ocultar el marco de la zona de detección sobre la imagen (tecla R)">Marco</button>
+      <button class="boton" id="btn-capturar" title="Descargar el cuadro con la escala como PNG">Capturar</button>
+      <div class="capas">
+        <button class="boton" id="btn-capas" aria-haspopup="true" aria-expanded="false" aria-controls="menu-capas" title="Elegir qué se muestra sobre la imagen">Capas ▾</button>
+        <div class="menu-capas" id="menu-capas" hidden>
+          <label class="fila"><input type="checkbox" id="capa-inserto"> Recuadro de detección <kbd>Z</kbd></label>
+          <label class="fila"><input type="checkbox" id="capa-marco"> Zonas y medidas <kbd>R</kbd></label>
+          <label class="fila"><input type="checkbox" id="capa-silueta"> Silueta del volcán <kbd>S</kbd></label>
+          <label class="fila"><input type="checkbox" id="capa-pn"> Máscara de VIGIA-PlumeNet</label>
+        </div>
+      </div>
       <button class="boton icono" id="btn-pantalla" title="Pantalla completa (tecla F)" aria-label="Pantalla completa">⛶</button>
       <button class="boton icono" id="btn-menu" title="Configuración y registro" aria-label="Abrir menú" aria-expanded="false" aria-controls="lateral">☰</button>
     </div>
@@ -69,11 +75,11 @@
         <figcaption><span class="muestra" id="ley-1-m"></span><span id="ley-1">rojizo</span> <span class="muestra segunda" id="ley-2-m"></span><span id="ley-2">brillante</span></figcaption>
       </figure>
     </div>
-    <p class="inserto-info" id="roi-info">Sin imagen</p>
     <div class="inserto-mancha">
-      <p class="inserto-info" id="roi-mancha"></p>
-      <button class="boton chico" id="btn-usar-tope" disabled title="Poner el marcador de altura en el tope de la incandescencia">Medir tope</button>
+      <p class="inserto-info" id="roi-info">Sin imagen</p>
+      <button class="boton chico" id="btn-usar-tope" disabled title="Poner el marcador de altura en el tope de la columna o de la incandescencia">Medir tope</button>
     </div>
+    <p class="inserto-info" id="roi-mancha" hidden></p>
     <p class="inserto-info pn-info" id="pn-info" hidden></p>
     <div class="inserto-graf">
       <div class="inserto-graf-cab">
@@ -149,31 +155,33 @@
     <details class="panel">
       <summary>Detección de incandescencia y ceniza</summary>
       <div class="campos">
-        <label>Brillo <input id="n-brillo" type="range" min="0.5" max="4" step="0.1" value="1"></label>
-        <label>Contraste <input id="n-contraste" type="range" min="0.5" max="3" step="0.1" value="1"></label>
-        <div class="acciones">
-          <button class="boton" id="btn-noche">Preset noche</button>
-          <button class="boton" id="btn-dia">Sin realce</button>
-        </div>
         <label class="fila"><input id="n-muestreo" type="checkbox"> Registrar los índices automáticamente</label>
         <label>Intervalo de muestreo (s) <input id="n-int" type="number" min="2" step="1"></label>
-        <h3 class="subtitulo">Incandescencia (noche)</h3>
-        <label>Umbral de alerta (%) <input id="n-umbral" type="number" min="0" step="0.5"></label>
-        <label>Umbral de brillo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
-        <h3 class="subtitulo">Ceniza (día)</h3>
-        <label>Umbral de alerta (%) <input id="c-umbral" type="number" min="0" step="0.5"></label>
-        <label>Umbral de calidez: aumento de R − B sobre el fondo <input id="c-calidez" type="number" min="1" step="1"></label>
-        <label>Umbral de oscurecimiento: baja de luminancia bajo el fondo <input id="c-oscuro" type="number" min="1" step="1"></label>
+        <label>Alerta de ceniza, de día (% de la zona de columna) <input id="c-umbral" type="number" min="0" step="0.5"></label>
+        <label>Alerta de incandescencia, de noche (% de la zona del cráter) <input id="n-umbral" type="number" min="0" step="0.5"></label>
         <div class="acciones">
           <button class="boton" id="btn-fondo" title="Volver a formar el fondo con la imagen actual">Reiniciar fondo</button>
-        </div>
-        <div class="indice" id="indice">Índice: <strong>--</strong></div>
-        <div class="acciones">
           <button class="boton" id="btn-exp-muestras">Exportar muestras CSV</button>
           <button class="boton peligro" id="btn-borrar-muestras">Borrar muestras</button>
         </div>
+        <div class="indice" id="indice">Índice: <strong>--</strong></div>
+        <details class="avanzado">
+          <summary>Ajustes avanzados</summary>
+          <div class="campos">
+            <label>Brillo de la imagen <input id="n-brillo" type="range" min="0.5" max="4" step="0.1" value="1"></label>
+            <label>Contraste de la imagen <input id="n-contraste" type="range" min="0.5" max="3" step="0.1" value="1"></label>
+            <div class="acciones">
+              <button class="boton" id="btn-noche">Realce nocturno</button>
+              <button class="boton" id="btn-dia">Sin realce</button>
+            </div>
+            <label>Incandescencia: brillo mínimo de un píxel (0 a 255) <input id="n-brillo-umbral" type="number" min="1" max="255" step="5"></label>
+            <label>Ceniza: aumento mínimo de calidez, R − B, sobre el fondo <input id="c-calidez" type="number" min="1" step="1"></label>
+            <label>Ceniza: oscurecimiento mínimo bajo el fondo <input id="c-oscuro" type="number" min="1" step="1"></label>
+            <label>Vapor o ceniza: calidez máxima del vapor, R − B <input id="c-vapor" type="number" step="5"></label>
+          </div>
+        </details>
         <p class="nota">Incandescencia: porcentaje de píxeles rojizos o brillantes en la ROI sobre el cráter. De noche la cámara transmite en blanco y negro, así que cuenta solo el brillo.</p>
-        <p class="nota">Ceniza: porcentaje de píxeles de la zona de columna que se volvieron más cálidos o más oscuros que su propio fondo, un promedio lento de los últimos minutos. La columna es la mancha más grande que toca la ROI del cráter. El fondo se forma al abrir el sitio; si en ese momento ya hay una emisión, use Reiniciar fondo con el cielo despejado.</p>
+        <p class="nota">Ceniza y vapor: cada píxel de la zona de columna se compara con su propio fondo, un promedio lento de los últimos minutos. Cuenta como vapor si se aclaró más de lo que se volvió cálido, como hace una nube blanca, y como ceniza si se volvió cálido sin aclararse tanto, o si se oscureció. La relación no depende de la opacidad de la nube. La columna es la mancha más grande que toca la ROI del cráter. El fondo se forma al abrir el sitio; si en ese momento ya hay una emisión, use Reiniciar fondo con el cielo despejado.</p>
         <p class="nota">Ambos índices requieren que el servidor permita leer los píxeles (CORS).</p>
       </div>
     </details>

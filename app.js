@@ -3,7 +3,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "2026-10-12 n";
+  const VERSION = "2026-10-16 b";
   const CFG = window.CAM_CONFIG || {};
   const LS = {
     ajustes: "tata.ajustes",
@@ -33,6 +33,7 @@
       umbralCeniza: CFG.umbralCeniza != null ? CFG.umbralCeniza : 5,
       umbralCalidez: CFG.umbralCalidez != null ? CFG.umbralCalidez : 12,
       umbralOscuro: CFG.umbralOscuro != null ? CFG.umbralOscuro : 25,
+      calidezNube: CFG.calidezNube != null ? CFG.calidezNube : 80,
       muestreo: false,
       brillo: 1,
       contraste: 1
@@ -486,12 +487,11 @@
   // ese mismo píxel. Así el terreno, la nieve y el cielo quieto se
   // cancelan, y solo quedan los cambios. A cada diferencia se le resta la
   // mediana de la zona, para que un cambio general de luz o de balance de
-  // color no active la detección. Clases:
-  //   1 más cálido : aumentó R − B respecto del fondo (tono gris café).
-  //   2 más oscuro : bajó la luminancia respecto del fondo.
+  // color no active la detección. Clases: 1 ceniza, 2 vapor (ver
+  // analizarCeniza y el README, «Cómo se separa la ceniza del vapor»).
   // Los píxeles detectados actualizan su fondo diez veces más lento, para
   // que una emisión sostenida no se absorba de inmediato.
-  const ANCHO_CENIZA = 300, TAU_FONDO_S = 600;
+  const ANCHO_CENIZA = 300, TAU_FONDO_S = 600, LUZ_NUBE = CFG.luzNube || 230;
   let fondo = null;
   function reiniciarFondo() { fondo = null; }
   function mediana(arr) {
@@ -499,6 +499,11 @@
     for (let i = 0; i < arr.length; i += paso) m.push(arr[i]);
     m.sort((a, b) => a - b);
     return m[m.length >> 1];
+  }
+  function soloClase(clases, k) {
+    const m = new Uint8Array(clases.length);
+    for (let p = 0; p < clases.length; p++) m[p] = clases[p] === k ? 1 : 0;
+    return m;
   }
   function analizarCeniza() {
     if (!estado.pixelesOk) return null;
@@ -512,7 +517,7 @@
     for (let i = 0, p = 0; p < n; i += 4, p++) { rb[p] = d[i] - d[i + 2]; l[p] = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; }
     const ahora = Date.now(), clave = [z.x, z.y, z.w, z.h, wm, hm].join(",");
     const clases = new Uint8Array(n);
-    const base = { z, img, clases, n, wm, hm, calidos: 0, oscuros: 0, indice: 0, mancha: null };
+    const base = { z, img, clases, n, wm, hm, ceniza: 0, vapor: 0, indice: 0, indiceVapor: 0, mancha: null, manchaVapor: null };
     if (!fondo || fondo.clave !== clave) {
       fondo = { clave, rb: rb.slice(), l: l.slice(), t: ahora, t0: ahora };
       return Object.assign(base, { edadFondo: 0 });
@@ -520,12 +525,23 @@
     const drb = new Float32Array(n), dl = new Float32Array(n);
     for (let p = 0; p < n; p++) { drb[p] = rb[p] - fondo.rb[p]; dl[p] = l[p] - fondo.l[p]; }
     const mRB = mediana(drb), mL = mediana(dl);
-    const uc = estado.ajustes.umbralCalidez, uo = estado.ajustes.umbralOscuro;
-    let calidos = 0, oscuros = 0;
+    // Clases: 1 ceniza, 2 vapor. Un píxel cubierto por una nube translúcida
+    // de opacidad α es una mezcla: fondo + α · (color de la nube − fondo).
+    // El cambio apunta entonces desde el fondo hacia el color propio de la
+    // nube. Se prolonga ese cambio hasta la luminancia de una nube iluminada
+    // (LUZ_NUBE) y se mira qué calidez R − B tendría allí: el vapor es blanco
+    // o apenas dorado, la ceniza es parda. Así el criterio no depende de la
+    // opacidad ni de cuán claro sea el cielo detrás. Un oscurecimiento que
+    // además azulea es cielo que se despeja tras una nube, no ceniza.
+    const uc = estado.ajustes.umbralCalidez, uo = estado.ajustes.umbralOscuro, cn = estado.ajustes.calidezNube;
+    let ceniza = 0, vapor = 0;
     for (let p = 0; p < n; p++) {
-      const L = l[p];
-      if (L >= 35 && L <= 235 && drb[p] - mRB >= uc) { clases[p] = 1; calidos++; }
-      else if (L >= 15 && dl[p] - mL <= -uo) { clases[p] = 2; oscuros++; }
+      const L = l[p], dL = dl[p] - mL, dRB = drb[p] - mRB;
+      const cambio = (L >= 35 && dRB >= uc) || (L >= 35 && dL >= 2 * uc) || (L >= 15 && dL <= -uo && dRB > -uc / 2);
+      if (!cambio) continue;
+      const propia = L >= LUZ_NUBE ? rb[p] : rb[p] + dRB * (LUZ_NUBE - L) / dL;
+      if (dL > 0 && propia < cn) { clases[p] = 2; vapor++; }
+      else { clases[p] = 1; ceniza++; }
     }
     const dt = Math.min(60, (ahora - fondo.t) / 1000); fondo.t = ahora;
     const a = 1 - Math.exp(-dt / TAU_FONDO_S), a2 = a / 10;
@@ -536,9 +552,10 @@
     // Caja del cráter (la ROI de incandescencia) en píxeles de la máscara.
     const sx = z.w / wm, sy = z.h / hm, r = estado.roi;
     const caja = { x0: (r.x * z.f - z.x) / sx, x1: ((r.x + r.w) * z.f - z.x) / sx, y0: (r.y * z.f - z.y) / sy, y1: ((r.y + r.h) * z.f - z.y) / sy };
-    const m = manchaMayor(clases, wm, hm, caja);
-    return Object.assign(base, { calidos, oscuros, indice: 100 * (calidos + oscuros) / n, edadFondo: (ahora - fondo.t0) / 1000,
-      mancha: m ? medirEnMetros(m, { ox: z.x, oy: z.y, sx, sy, f: z.f }, wm, hm) : null });
+    const mapa = { ox: z.x, oy: z.y, sx, sy, f: z.f };
+    const mc = manchaMayor(soloClase(clases, 1), wm, hm, caja), mv = manchaMayor(soloClase(clases, 2), wm, hm, caja);
+    return Object.assign(base, { ceniza, vapor, indice: 100 * ceniza / n, indiceVapor: 100 * vapor / n, edadFondo: (ahora - fondo.t0) / 1000,
+      mancha: mc ? medirEnMetros(mc, mapa, wm, hm) : null, manchaVapor: mv ? medirEnMetros(mv, mapa, wm, hm) : null });
   }
 
   // ---------- Silueta del volcán ----------
@@ -637,7 +654,7 @@
   }
 
   function limpiarMancha() {
-    if (estado.mancha) { estado.mancha = null; dibujarOverlay(); }
+    if (estado.mancha || estado.manchaVapor) { estado.mancha = null; estado.manchaVapor = null; dibujarOverlay(); }
     $("roi-mancha").textContent = "";
     $("btn-usar-tope").disabled = true;
   }
@@ -645,15 +662,15 @@
   // ---------- Recuadro: ampliación, máscara y medidas ----------
   const COLORES = {
     incand: { 1: [255, 212, 0], 2: [0, 229, 255] },     // amarillo rojizo, cian brillante
-    ceniza: { 1: [214, 140, 60], 2: [179, 136, 255] }   // café más cálido, lila más oscuro
+    ceniza: { 1: [214, 140, 60], 2: [170, 225, 255] }   // café ceniza, celeste claro vapor
   };
-  const COLOR_GUIA = { incand: "rgb(0,229,255)", ceniza: "rgb(232,170,90)" };
+  const COLOR_GUIA = { incand: "rgb(0,229,255)", ceniza: "rgb(232,170,90)", vapor: "rgb(170,225,255)" };
   function renderInserto() {
     const modo = estado.modoDet || "incand";
     document.querySelectorAll("[data-det]").forEach(b => b.classList.toggle("activo", b.dataset.det === (estado.ajustes.detector || "auto")));
     $("inserto-titulo").textContent = modo === "ceniza" ? "Detección de ceniza" : "Detección de incandescencia";
-    $("ley-1").textContent = modo === "ceniza" ? "más cálido" : "rojizo";
-    $("ley-2").textContent = modo === "ceniza" ? "más oscuro" : "brillante";
+    $("ley-1").textContent = modo === "ceniza" ? "ceniza" : "rojizo";
+    $("ley-2").textContent = modo === "ceniza" ? "vapor" : "brillante";
     $("ley-1-m").style.background = "rgb(" + COLORES[modo][1].join(",") + ")";
     $("ley-2-m").style.background = "rgb(" + COLORES[modo][2].join(",") + ")";
     $("graf-titulo").textContent = estado.ajustes.grafVar === "altura"
@@ -696,25 +713,32 @@
     caja.classList.toggle("alerta", alerta);
     if (modo === "ceniza") {
       const aprendiendo = r.edadFondo < 60;
-      info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · más cálidos " + r.calidos + " · más oscuros " + r.oscuros +
-        " de " + r.n + " px · fondo de " + Math.round(r.edadFondo / 60) + " min" +
-        (estado.bn ? " · <em>cámara en blanco y negro: solo cuenta el oscurecimiento</em>" : "") +
-        (aprendiendo ? " · <em>formando el fondo</em>" : "") + (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "");
+      info.innerHTML = "Ceniza <strong>" + r.indice.toFixed(1) + " %</strong> · vapor <strong class=\"vap\">" + r.indiceVapor.toFixed(1) + " %</strong>" +
+        (aprendiendo ? " · <em>formando el fondo</em>" : "") + (estado.bn ? " · <em>imagen en blanco y negro</em>" : "") +
+        (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "");
+      info.title = r.ceniza + " px de ceniza y " + r.vapor + " de vapor, de " + r.n + " px de la zona · fondo de " + Math.round(r.edadFondo / 60) + " min" +
+        (estado.bn ? " · con la imagen en blanco y negro la ceniza se reconoce solo por el oscurecimiento" : "");
     } else {
-      info.innerHTML = "Índice <strong>" + r.indice.toFixed(2) + " %</strong> · rojizos " + r.rojizos + " · brillantes " + r.brillantes +
-        " de " + r.n + " px" + (alerta ? " · <strong>INCANDESCENCIA</strong>" : "");
+      info.innerHTML = "Incandescencia <strong>" + r.indice.toFixed(1) + " %</strong>" + (alerta ? " · <strong>ALERTA</strong>" : "");
+      info.title = r.rojizos + " px rojizos y " + r.brillantes + " brillantes, de " + r.n + " px de la zona del cráter";
     }
     fijarMancha(r, modo);
   }
   function fijarMancha(r, modo) {
     const mm = r && r.mancha;
     estado.mancha = mm ? Object.assign({ t: Date.now(), modo }, mm) : null;
-    const nombre = modo === "ceniza" ? "Columna" : "Mancha principal";
-    $("roi-mancha").innerHTML = mm
-      ? nombre + ": tope <strong>" + fmtM(mm.topeM) + "</strong> sobre el cráter · alto <strong>" + fmtTam(mm.altoM) +
-        "</strong> · ancho <strong>" + fmtTam(mm.anchoM) + "</strong> · " + mm.px + " px" + (mm.recortada ? " · <em>toca el borde de la zona</em>" : "")
-      : (r ? (modo === "ceniza" ? "Sin columna conectada al cráter" : "Sin mancha detectada") : "");
-    $("btn-usar-tope").disabled = !mm;
+    const mv = modo === "ceniza" && r && r.manchaVapor;
+    estado.manchaVapor = mv ? Object.assign({ t: Date.now(), modo: "vapor" }, mv) : null;
+    const desc = (x) => "tope <strong>" + fmtM(x.topeM) + (x.corteArriba ? " o más" : "") + "</strong> · alto <strong>" + fmtTam(x.altoM) +
+      "</strong> · ancho <strong>" + fmtTam(x.anchoM) + "</strong>";
+    if (modo === "ceniza") {
+      $("roi-mancha").innerHTML = !r ? "" :
+        (mm ? "Columna de ceniza: " + desc(mm) : "Sin columna de ceniza conectada al cráter") + "<br>" +
+        (mv ? '<span class="vap">Columna de vapor: ' + desc(mv) + "</span>" : "Sin columna de vapor conectada al cráter");
+    } else {
+      $("roi-mancha").innerHTML = mm ? "Mancha principal: " + desc(mm) + " · " + mm.px + " px" : (r ? "Sin mancha detectada" : "");
+    }
+    $("btn-usar-tope").disabled = !(mm || mv);
     dibujarOverlay();
   }
   // Metros redondeados a 5 m: la resolución es de unos 2 m por píxel.
@@ -746,7 +770,8 @@
       rojizos: m.rojizos, brillantes: m.brillantes, umbralBrillo: estado.ajustes.umbralBrillo,
       topeInc: m.mancha ? Math.round(m.mancha.topeM) : null, altoInc: m.mancha ? Math.round(m.mancha.altoM) : null,
       anchoInc: m.mancha ? Math.round(m.mancha.anchoM) : null,
-      indCen: c ? +c.indice.toFixed(2) : null, calidos: c ? c.calidos : null, oscuros: c ? c.oscuros : null,
+      indCen: c ? +c.indice.toFixed(2) : null, indVap: c ? +c.indiceVapor.toFixed(2) : null, pxCen: c ? c.ceniza : null, pxVap: c ? c.vapor : null,
+      topeVap: c && c.manchaVapor ? Math.round(c.manchaVapor.topeM) : null,
       topeCol: mc ? Math.round(mc.topeM) : null, altoCol: mc ? Math.round(mc.altoM) : null, anchoCol: mc ? Math.round(mc.anchoM) : null,
       ...pnParaMuestra() });
     if (estado.muestras.length > 5000) estado.muestras.splice(0, estado.muestras.length - 5000);
@@ -841,7 +866,7 @@
       ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
       const t = new Date(p.s.t);
       lect.textContent = fmtLocal.format(t) + " local · " + fmtUtc.format(t) + " UTC · " + (altura ? "tope " + Math.round(valor(p.s)) + " m" : "índice " + valor(p.s).toFixed(2) + " %") + (ceniza
-        ? (p.s.calidos != null ? " · " + p.s.calidos + " más cálidos, " + p.s.oscuros + " más oscuros" : "") +
+        ? (p.s.indVap != null ? " · vapor " + (altura ? (p.s.topeVap != null ? p.s.topeVap + " m" : "sin columna") : p.s.indVap.toFixed(2) + " %") : "") +
           (p.s.topeCol != null ? " · columna: tope " + p.s.topeCol + " m, alto " + p.s.altoCol + " m, ancho " + p.s.anchoCol + " m" : "")
         : (p.s.brillantes != null ? " · " + p.s.brillantes + " brillantes, " + p.s.rojizos + " rojizos" : "") +
           (p.s.topeInc != null ? " · tope " + p.s.topeInc + " m, alto " + p.s.altoInc + " m, ancho " + p.s.anchoInc + " m" : ""));
@@ -924,7 +949,7 @@
       class: cal ? "arrastrable" : "", "data-manija": manija }));
     if (cal || (marcoVisible && estado.modoDet === "ceniza")) zonaRect(zc, "rgb(232,170,90)", "zona");
     if (cal || (marcoVisible && estado.modoDet !== "ceniza")) zonaRect(r, "#e5533d", "roi");
-    const mm = estado.mancha;
+    for (const mm of [estado.manchaVapor, estado.mancha]) {
     if (mm && marcoVisible && !$("inserto").hidden) {
       const colorGuia = COLOR_GUIA[mm.modo] || COLOR_GUIA.incand;
       const gm = el("g", { stroke: colorGuia, fill: "none", "stroke-width": 1.2, "pointer-events": "none" });
@@ -938,6 +963,7 @@
       gm.appendChild(el("line", { x1: xc, y1: mm.topRef, x2: xc, y2: mm.botRef }));
       gm.appendChild(el("line", { x1: xc - 3, y1: mm.botRef, x2: xc + 3, y2: mm.botRef }));
       overlay.appendChild(gm);
+    }
     }
     actualizarMedidaFija();
     if (estado.modoUi === "calibrar") {
@@ -962,11 +988,15 @@
     const caja = $("medida-fija"), mm = estado.mancha, p = estado.pn;
     const visible = !$("inserto").hidden;
     const lineas = [];
+    const linea = (nombre, x, clase) => '<span class="' + clase + '"><span class="etq">' + nombre + ':</span> tope <strong>' + fmtM(x.topeM) +
+      (x.corteArriba ? " o más" : "") + '</strong> · alto <strong>' + fmtTam(x.altoM) + '</strong> · ancho <strong>' + fmtTam(x.anchoM) + '</strong></span>';
     if (visible && mm) {
-      const nombre = mm.modo === "ceniza" ? "Columna" : "Incandescencia";
-      lineas.push('<span class="etq">' + nombre + ':</span> tope <strong>' + fmtM(mm.topeM) + (mm.corteArriba ? " o más" : "") +
-        '</strong> · alto <strong>' + fmtTam(mm.altoM) + '</strong> · ancho <strong>' + fmtTam(mm.anchoM) + '</strong>');
+      lineas.push(linea(mm.modo === "ceniza" ? "Ceniza" : "Incandescencia", mm, mm.modo === "ceniza" ? "cen" : "inc"));
       caja.style.setProperty("--color-medida", COLOR_GUIA[mm.modo] || COLOR_GUIA.incand);
+    }
+    if (visible && estado.manchaVapor) {
+      lineas.push(linea("Vapor", estado.manchaVapor, "vap"));
+      if (!mm) caja.style.setProperty("--color-medida", COLOR_GUIA.vapor);
     }
     if (visible && p && p.colCeniza && Date.now() - p.t < 2 * 1000 * Math.max(5, estado.ajustes.pnIntervalo || 30)) {
       const c = p.colCeniza;
@@ -1123,10 +1153,10 @@
   });
   $("btn-exp-muestras").addEventListener("click", () => {
     descargarCsv("muestras_deteccion.csv", [["fecha_hora_local", "iso_utc", "detector", "lum_cielo", "camara_bn", "indice_incand_pct", "lum_roi", "lum_cuadro", "px_rojizos", "px_brillantes", "umbral_brillo",
-      "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "tope_columna_m", "alto_columna_m", "ancho_columna_m",
+      "tope_incand_m", "alto_incand_m", "ancho_incand_m", "indice_ceniza_pct", "indice_vapor_pct", "px_ceniza", "px_vapor", "tope_columna_m", "alto_columna_m", "ancho_columna_m", "tope_vapor_m",
       "pn_ceniza_pct", "pn_gas_pct", "pn_tope_ceniza_m", "pn_ceniza_sale_del_recorte", "pn_tope_gas_m"]]
       .concat(estado.muestras.map(s => [horaLocal(new Date(s.t)), s.t, s.modo === "ceniza" ? "dia" : "noche", s.lumCielo, s.bn, s.indice, s.lumRoi, s.lumCuadro, s.rojizos, s.brillantes, s.umbralBrillo,
-        s.topeInc, s.altoInc, s.anchoInc, s.indCen, s.calidos, s.oscuros, s.topeCol, s.altoCol, s.anchoCol, s.pnCen, s.pnGas, s.pnTope, s.pnSale, s.pnTopeGas])));
+        s.topeInc, s.altoInc, s.anchoInc, s.indCen, s.indVap, s.pxCen, s.pxVap, s.topeCol, s.altoCol, s.anchoCol, s.topeVap, s.pnCen, s.pnGas, s.pnTope, s.pnSale, s.pnTopeGas])));
   });
   $("btn-borrar-muestras").addEventListener("click", () => {
     if (confirm("¿Borrar las muestras de los índices de incandescencia y ceniza?")) { estado.muestras = []; guardar(LS.muestras, []); dibujarGrafico(); }
@@ -1138,7 +1168,7 @@
     $("in-alias").value = a.alias; $("in-modo").value = a.modo; $("in-hls").value = a.hlsUrl; $("in-snap").value = a.snapshotUrl;
     $("in-int-snap").value = a.intervaloSnapshot; $("n-int").value = a.intervaloMuestreo; $("n-umbral").value = a.umbral;
     $("n-muestreo").checked = $("n-muestreo-ins").checked = !!a.muestreo; $("n-brillo-umbral").value = a.umbralBrillo;
-    $("c-umbral").value = a.umbralCeniza; $("c-calidez").value = a.umbralCalidez; $("c-oscuro").value = a.umbralOscuro; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
+    $("c-umbral").value = a.umbralCeniza; $("c-calidez").value = a.umbralCalidez; $("c-oscuro").value = a.umbralOscuro; $("c-vapor").value = a.calidezNube; $("n-brillo").value = a.brillo; $("n-contraste").value = a.contraste;
   }
   function leerFuente() {
     const a = estado.ajustes;
@@ -1178,9 +1208,10 @@
     a.umbralCeniza = Math.max(0, +$("c-umbral").value || 0);
     a.umbralCalidez = Math.max(1, +$("c-calidez").value || 12);
     a.umbralOscuro = Math.max(1, +$("c-oscuro").value || 25);
+    a.calidezNube = +$("c-vapor").value || 80;
     guardar(LS.ajustes, a); aplicarFiltro(); dibujarOverlay();
   };
-  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral", "c-umbral", "c-calidez", "c-oscuro"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); dibujarGrafico(); }));
+  ["n-brillo", "n-contraste", "n-int", "n-umbral", "n-brillo-umbral", "c-umbral", "c-calidez", "c-oscuro", "c-vapor"].forEach(id => $(id).addEventListener("input", () => { guardarNoche(); actualizarInserto(); dibujarGrafico(); }));
   $("n-muestreo").addEventListener("change", () => { $("n-muestreo-ins").checked = $("n-muestreo").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   $("n-muestreo-ins").addEventListener("change", () => { $("n-muestreo").checked = $("n-muestreo-ins").checked; guardarNoche(); reprogramarMuestreo(); dibujarGrafico(); });
   ["n-int"].forEach(id => $(id).addEventListener("change", reprogramarMuestreo));
@@ -1199,17 +1230,18 @@
 
   function mostrarInserto(ver) {
     $("inserto").hidden = !ver;
-    $("btn-inserto").classList.toggle("activo", ver);
+    $("capa-inserto").checked = ver;
     estado.ajustes.inserto = ver; guardar(LS.ajustes, estado.ajustes);
     if (ver) { actualizarInserto(); dibujarGrafico(); }
   }
-  $("btn-inserto").addEventListener("click", () => mostrarInserto($("inserto").hidden));
+  $("capa-inserto").addEventListener("change", (ev) => mostrarInserto(ev.target.checked));
   // Lleva el marcador de medición al tope sugerido; luego se puede ajustar
   // en modo Medir antes de registrar.
   $("btn-usar-tope").addEventListener("click", () => {
-    if (!estado.mancha) return;
-    estado.marcadorY = estado.mancha.topRef;
-    $("r-tipo").value = estado.mancha.modo === "ceniza" ? "columna" : "incandescencia";
+    const m = estado.mancha || estado.manchaVapor;
+    if (!m) return;
+    estado.marcadorY = m.topRef;
+    $("r-tipo").value = m.modo === "incand" ? "incandescencia" : "columna";
     dibujarOverlay();
   });
 
@@ -1217,10 +1249,10 @@
   // muestra siempre, porque es lo que se arrastra.
   function mostrarMarco(ver) {
     estado.ajustes.marco = ver; guardar(LS.ajustes, estado.ajustes);
-    $("btn-marco").classList.toggle("activo", ver);
+    $("capa-marco").checked = ver;
     dibujarOverlay();
   }
-  $("btn-marco").addEventListener("click", () => mostrarMarco(estado.ajustes.marco === false));
+  $("capa-marco").addEventListener("change", (ev) => mostrarMarco(ev.target.checked));
   $("btn-cerrar-inserto").addEventListener("click", () => mostrarInserto(false));
 
   function borrarMedida() {
@@ -1233,13 +1265,23 @@
 
   function mostrarSilueta(ver) {
     estado.ajustes.silueta = ver; guardar(LS.ajustes, estado.ajustes);
-    $("btn-silueta").classList.toggle("activo", ver);
+    $("capa-silueta").checked = ver;
     dibujarOverlay();
   }
-  $("btn-silueta").addEventListener("click", () => {
-    if (!estado.silueta) { $("panel-cal").open = true; abrirMenu(true); return; }
-    mostrarSilueta(estado.ajustes.silueta === false);
+  $("capa-silueta").addEventListener("change", (ev) => {
+    if (!estado.silueta) { ev.target.checked = false; $("panel-cal").open = true; abrirMenu(true); return; }
+    mostrarSilueta(ev.target.checked);
   });
+  // Máscara de VIGIA-PlumeNet: sincronizada con la casilla del panel lateral.
+  $("capa-pn").addEventListener("change", (ev) => { $("pn-mascara").checked = ev.target.checked; pnLeer(); });
+  $("pn-mascara").addEventListener("change", () => { $("capa-pn").checked = $("pn-mascara").checked; });
+  // Menú de capas: se abre con su botón y se cierra al hacer clic fuera.
+  function abrirCapas(abrir) {
+    $("menu-capas").hidden = !abrir;
+    $("btn-capas").setAttribute("aria-expanded", String(abrir));
+  }
+  $("btn-capas").addEventListener("click", (ev) => { ev.stopPropagation(); abrirCapas($("menu-capas").hidden); });
+  document.addEventListener("click", (ev) => { if (!ev.target.closest(".capas")) abrirCapas(false); });
   $("btn-trazar-silueta").addEventListener("click", () => {
     const r = trazarSilueta();
     const nota = $("silueta-nota");
@@ -1448,9 +1490,11 @@ self.onmessage = async (ev) => {
     const edad = Math.round((Date.now() - p.t) / 1000);
     const alerta = p.ceniza >= (estado.ajustes.pnUmbral != null ? estado.ajustes.pnUmbral : PN_CFG.umbral) && p.colCeniza;
     el2.classList.toggle("alerta", !!alerta);
-    el2.innerHTML = "PlumeNet, hace " + (edad < 90 ? edad + " s" : Math.round(edad / 60) + " min") + ": ceniza <strong>" + p.ceniza.toFixed(1) + " %</strong>" + pnTope(p.colCeniza) +
-      " · gas <strong>" + p.gas.toFixed(1) + " %</strong>" + pnTope(p.colGas) + (p.lava > 0.05 ? " · lava " + p.lava.toFixed(1) + " %" : "") +
-      (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "");
+    el2.innerHTML = "PlumeNet: ceniza <strong>" + p.ceniza.toFixed(1) + " %</strong> · gas <strong class=\"vap\">" + p.gas.toFixed(1) + " %</strong>" +
+      (p.lava > 0.05 ? " · lava " + p.lava.toFixed(1) + " %" : "") + (alerta ? " · <strong>POSIBLE EMISIÓN</strong>" : "") +
+      ' <span class="edad">hace ' + (edad < 90 ? edad + " s" : Math.round(edad / 60) + " min") + "</span>";
+    el2.title = "Topes: ceniza" + pnTope(p.colCeniza).replace(/<[^>]+>/g, "") + ", gas" + pnTope(p.colGas).replace(/<[^>]+>/g, "") +
+      " · análisis en " + (p.ms / 1000).toFixed(1) + " s con " + (p.ep === "webgpu" ? "WebGPU" : "WebAssembly");
   }
   setInterval(() => { if (estado.pn) pnTexto(); }, 5000);
   function pnDibujarMascara() {
@@ -1538,7 +1582,7 @@ self.onmessage = async (ev) => {
   document.addEventListener("keydown", (ev) => {
     if (ev.target.closest("input, select, textarea") || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const k = ev.key.toLowerCase();
-    if (k === "escape") { if (lateral.classList.contains("abierto")) abrirMenu(false); else borrarMedida(); }
+    if (k === "escape") { if (!$("menu-capas").hidden) abrirCapas(false); else if (lateral.classList.contains("abierto")) abrirMenu(false); else borrarMedida(); }
     else if (k === "delete" || k === "backspace") borrarMedida();
     else if (k === "v") fijarModoUi("ver");
     else if (k === "m") fijarModoUi("medir");
@@ -1554,7 +1598,8 @@ self.onmessage = async (ev) => {
   pnAlIniciar();
   mostrarInserto(estado.ajustes.inserto !== false);
   mostrarMarco(estado.ajustes.marco !== false);
-  $("btn-silueta").classList.toggle("activo", !!estado.silueta && estado.ajustes.silueta !== false);
+  $("capa-silueta").checked = !!estado.silueta && estado.ajustes.silueta !== false;
+  $("capa-pn").checked = estado.ajustes.pnMascara !== false;
   console.info("Seguimiento Cámara Tata, versión " + VERSION);
   llenarFuente(); llenarCalib(); renderRegistro(); dibujarGrafico(); dibujarOverlay();
   conectar().then(reprogramarMuestreo);

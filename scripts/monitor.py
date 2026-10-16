@@ -77,7 +77,7 @@ ANCHO_CENIZA = 300          # ancho de la zona de columna reducida, en píxeles
 LUM_CIELO_DIA, MARGEN_DIA, COLOR_MIN = 70.0, 8.0, 4.0
 COLORES = {
     "incand": {1: (255, 212, 0), 2: (0, 229, 255)},     # rojizo, brillante
-    "ceniza": {1: (214, 140, 60), 2: (179, 136, 255)},  # más cálido, más oscuro
+    "ceniza": {1: (214, 140, 60), 2: (170, 225, 255)},  # ceniza, vapor
 }
 UA = "Mozilla/5.0 (seguimiento-camara-tata)"
 
@@ -282,7 +282,15 @@ def mediana(valores):
     return m[len(m) // 2]
 
 
-def indice_ceniza(im, f, fondo, umbral_calidez, umbral_oscuro, t_unix):
+def calidez_propia(rb, L, d_rb, d_l, luz_nube):
+    """Calidez (R − B) que tendría la nube del píxel con luminancia luz_nube,
+    prolongando el cambio respecto del fondo (d_rb, d_l, con d_l > 0)."""
+    if L >= luz_nube:
+        return rb
+    return rb + d_rb * (luz_nube - L) / d_l
+
+
+def indice_ceniza(im, f, fondo, umbral_calidez, umbral_oscuro, t_unix, calidez_nube=80.0, luz_nube=230.0):
     """Índice de ceniza (%% de píxeles de la zona de columna que se volvieron
     más cálidos o más oscuros que su fondo), máscara y medidas de la
     columna conectada al cráter.
@@ -305,8 +313,8 @@ def indice_ceniza(im, f, fondo, umbral_calidez, umbral_oscuro, t_unix):
         l.append(0.299 * R + 0.587 * G + 0.114 * B)
     n = wm * hm
     clave = f"{zx},{zy},{zw},{zh},{wm},{hm}"
-    res = {"indice": 0.0, "calidos": 0, "oscuros": 0, "mascara": bytearray(n), "zona": zona, "w": wm, "h": hm,
-           "medidas": None, "edad_fondo_s": 0.0, "fondo_nuevo": False}
+    res = {"indice": 0.0, "indice_vapor": 0.0, "ceniza": 0, "vapor": 0, "mascara": bytearray(n), "zona": zona, "w": wm, "h": hm,
+           "medidas": None, "medidas_vapor": None, "edad_fondo_s": 0.0, "fondo_nuevo": False}
     if fondo.clave != clave or fondo.rb is None or t_unix - fondo.t > 3 * fondo.tau:
         fondo.clave, fondo.rb, fondo.l, fondo.t, fondo.t0 = clave, rb, l, t_unix, t_unix
         fondo.guardar()
@@ -315,16 +323,26 @@ def indice_ceniza(im, f, fondo, umbral_calidez, umbral_oscuro, t_unix):
     drb = [rb[p] - fondo.rb[p] for p in range(n)]
     dl = [l[p] - fondo.l[p] for p in range(n)]
     m_rb, m_l = mediana(drb), mediana(dl)
+    # Clases: 1 ceniza, 2 vapor. Un píxel con una nube translúcida es una
+    # mezcla entre el fondo y el color propio de la nube, así que el cambio
+    # apunta desde el fondo hacia ese color. Se prolonga ese cambio hasta la
+    # luminancia de una nube iluminada (luz_nube) y se mira qué calidez
+    # (R − B) tendría allí: el vapor es blanco o apenas dorado, la ceniza es
+    # parda. Así el criterio no depende de la opacidad ni de cuán claro sea
+    # el cielo detrás (ver README, «Ceniza y vapor»). Un oscurecimiento que
+    # además azulea es cielo que se despeja tras una nube, no ceniza.
     mascara = res["mascara"]
-    calidos = oscuros = 0
+    ceniza = vapor = 0
     for p in range(n):
-        L = l[p]
-        if 35 <= L <= 235 and drb[p] - m_rb >= umbral_calidez:
-            mascara[p] = 1
-            calidos += 1
-        elif L >= 15 and dl[p] - m_l <= -umbral_oscuro:
+        L, d_l, d_rb = l[p], dl[p] - m_l, drb[p] - m_rb
+        if not ((L >= 35 and d_rb >= umbral_calidez) or (L >= 35 and d_l >= 2 * umbral_calidez) or (L >= 15 and d_l <= -umbral_oscuro and d_rb > -umbral_calidez / 2)):
+            continue
+        if d_l > 0 and calidez_propia(rb[p], L, d_rb, d_l, luz_nube) < calidez_nube:
             mascara[p] = 2
-            oscuros += 1
+            vapor += 1
+        else:
+            mascara[p] = 1
+            ceniza += 1
     a = 1 - math.exp(-max(0.0, t_unix - fondo.t) / fondo.tau)
     a2 = a / 10
     for p in range(n):
@@ -337,10 +355,12 @@ def indice_ceniza(im, f, fondo, umbral_calidez, umbral_oscuro, t_unix):
     sx, sy = zw / wm, zh / hm
     caja = ((ROI["x"] * f - zx) / sx, (ROI["y"] * f - zy) / sy,
             ((ROI["x"] + ROI["w"]) * f - zx) / sx, ((ROI["y"] + ROI["h"]) * f - zy) / sy)
-    m = mancha_mayor(mascara, wm, hm, caja=caja)
-    res.update(indice=100.0 * (calidos + oscuros) / n, calidos=calidos, oscuros=oscuros,
+    mc = mancha_mayor(bytearray(1 if v == 1 else 0 for v in mascara), wm, hm, caja=caja)
+    mv = mancha_mayor(bytearray(1 if v == 2 else 0 for v in mascara), wm, hm, caja=caja)
+    res.update(indice=100.0 * ceniza / n, indice_vapor=100.0 * vapor / n, ceniza=ceniza, vapor=vapor,
                edad_fondo_s=t_unix - fondo.t0,
-               medidas=medir_en_metros(m, zx, zy, sx, sy, f, wm, hm) if m else None)
+               medidas=medir_en_metros(mc, zx, zy, sx, sy, f, wm, hm) if mc else None,
+               medidas_vapor=medir_en_metros(mv, zx, zy, sx, sy, f, wm, hm) if mv else None)
     return res
 
 
@@ -394,8 +414,8 @@ def anotar(im, f, texto, modo, medidas):
 
 CABECERA = ["fecha_hora_local", "archivo", "ancho", "alto", "lum_cuadro", "lum_cielo", "colorido", "detector",
             "indice_incand_pct", "lum_roi", "incandescencia", "tope_incand_m", "alto_incand_m", "ancho_incand_m",
-            "indice_ceniza_pct", "px_mas_calidos", "px_mas_oscuros", "posible_emision", "edad_fondo_min",
-            "tope_columna_m", "alto_columna_m", "ancho_columna_m",
+            "indice_ceniza_pct", "indice_vapor_pct", "px_ceniza", "px_vapor", "posible_emision", "edad_fondo_min",
+            "tope_columna_m", "alto_columna_m", "ancho_columna_m", "tope_vapor_m",
             "pn_ceniza_pct", "pn_gas_pct", "pn_tope_ceniza_m", "pn_tope_gas_m", "pn_confianza_media",
             "pn_ceniza_sale_del_recorte", "pn_gas_sale_del_recorte"]
 
@@ -460,6 +480,8 @@ def main():
     ap.add_argument("--umbral-ceniza", type=float, default=5.0, help="índice de ceniza (%%) para marcar posible emisión")
     ap.add_argument("--umbral-calidez", type=float, default=12, help="aumento mínimo de R − B de un píxel sobre su fondo")
     ap.add_argument("--umbral-oscuro", type=float, default=25, help="baja mínima de luminancia de un píxel bajo su fondo")
+    ap.add_argument("--calidez-nube", type=float, default=80, help="calidez R − B de una nube iluminada bajo la cual un cambio cuenta como vapor")
+    ap.add_argument("--luz-nube", type=float, default=230, help="luminancia de una nube iluminada, a la que se prolonga cada cambio")
     ap.add_argument("--tau-fondo", type=float, default=600, help="constante de tiempo del fondo de ceniza, en segundos")
     ap.add_argument("--zona", nargs=4, type=float, metavar=("X", "Y", "W", "H"), help="sobrescribe la zona de columna para ceniza")
     ap.add_argument("--mascaras", action="store_true", help="guarda la máscara de detección de cada captura")
@@ -531,7 +553,7 @@ def main():
             ruta_estado.write_text(json.dumps(estado_det), encoding="utf-8")
             modo = a.detector if a.detector != "auto" else ("ceniza" if dia else "incand")
             inc = indice_incandescencia(im, f)
-            cen = indice_ceniza(im, f, fondo, a.umbral_calidez, a.umbral_oscuro, time.time()) if (modo == "ceniza" or dia) else None
+            cen = indice_ceniza(im, f, fondo, a.umbral_calidez, a.umbral_oscuro, time.time(), a.calidez_nube, a.luz_nube) if (modo == "ceniza" or dia) else None
             mi, mc = inc["medidas"], cen["medidas"] if cen else None
             alerta_inc = inc["indice"] >= a.umbral
             alerta_cen = bool(cen) and cen["indice"] >= a.umbral_ceniza
@@ -539,7 +561,11 @@ def main():
                 texto = f"Cámara Tata · {t.strftime('%Y-%m-%d %H:%M:%S')} · ceniza {cen['indice']:.2f} %"
                 texto += " POSIBLE EMISIÓN" if alerta_cen else ""
                 if mc:
-                    texto += f" · columna: tope {mc['tope_m']:.0f} m · alto {mc['alto_m']:.0f} m · ancho {mc['ancho_m']:.0f} m"
+                    texto += f" · columna de ceniza: tope {mc['tope_m']:.0f} m · alto {mc['alto_m']:.0f} m · ancho {mc['ancho_m']:.0f} m"
+                texto += f" · vapor {cen['indice_vapor']:.2f} %"
+                mvap = cen["medidas_vapor"]
+                if mvap:
+                    texto += f" · columna de vapor: tope {mvap['tope_m']:.0f} m"
                 if cen["fondo_nuevo"]:
                     texto += " · fondo nuevo"
                 if bn:
@@ -574,9 +600,10 @@ def main():
                     "dia" if modo == "ceniza" else "noche",
                     fmt(inc["indice"], 2), fmt(inc["lum_roi"], 1), int(alerta_inc),
                     fmt(mi and mi["tope_m"]), fmt(mi and mi["alto_m"]), fmt(mi and mi["ancho_m"]),
-                    fmt(cen and cen["indice"], 2), "" if not cen else cen["calidos"], "" if not cen else cen["oscuros"],
+                    fmt(cen and cen["indice"], 2), fmt(cen and cen["indice_vapor"], 2), "" if not cen else cen["ceniza"], "" if not cen else cen["vapor"],
                     "" if not cen else int(alerta_cen), fmt(cen and cen["edad_fondo_s"] / 60, 1),
-                    fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"])] +
+                    fmt(mc and mc["tope_m"]), fmt(mc and mc["alto_m"]), fmt(mc and mc["ancho_m"]),
+                    fmt(cen and cen["medidas_vapor"] and cen["medidas_vapor"]["tope_m"])] +
                     ([fmt(pn_res["ceniza_pct"], 2), fmt(pn_res["gas_pct"], 2),
                       fmt(pn_res["ceniza_medidas"] and pn_res["ceniza_medidas"]["tope_m"]),
                       fmt(pn_res["gas_medidas"] and pn_res["gas_medidas"]["tope_m"]), fmt(pn_res["confianza"], 2),

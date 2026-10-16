@@ -57,8 +57,9 @@ La cámara ocupa toda la ventana. Encima de la imagen hay una barra con los cont
 - **Video, Snapshot**: fuente de imagen. Queda marcada la que realmente se está mostrando, también cuando el video falla y el sitio pasa solo a snapshot.
 - **Altura**: lectura del marcador de medición, en metros sobre la cumbre. El botón ✕ junto a la lectura borra la línea de medición, igual que las teclas Supr o Esc.
 - **Registrar** y **Capturar PNG**: guardan la observación o descargan el cuadro con la escala.
+- **Capas**: menú con las casillas de lo que se dibuja sobre la imagen: recuadro de detección (Z), marco de la región de interés (R), silueta (S) y máscara de VIGIA-PlumeNet.
 - **⛶**: pantalla completa. En ese modo la barra se oculta tras unos segundos sin mover el mouse.
-- **☰**: abre el panel lateral con la fuente, la calibración, el índice de incandescencia y el registro.
+- **☰**: abre el panel lateral con la fuente, la detección, VIGIA-PlumeNet, la calibración y el registro. La sección Detección muestra lo esencial: registrar, el intervalo, los dos umbrales de alerta y los botones de exportar. Los criterios finos, el realce nocturno y el brillo y contraste de la vista quedan en «Ajustes avanzados».
 - **Relojes**: hora local de Chile y hora UTC.
 
 Atajos de teclado: V ver, M medir, C calibrar, Z recuadro de detección, R marco, S silueta, F pantalla completa, Supr para borrar la medición y Esc para cerrar el panel lateral o, si está cerrado, borrar la medición.
@@ -110,22 +111,47 @@ Los 47.5 px por 100 m originales se midieron directamente sobre la captura. Por 
 - La escala debe verificarse con una referencia de altitud conocida antes de reportar valores. Hasta entonces las alturas son estimaciones.
 - Si la cámara cambia de encuadre o de zoom, la calibración deja de valer y hay que repetirla con el modo Calibrar.
 
-## Detección de ceniza
+## Detección de ceniza y vapor
 
 En las imágenes disponibles, tomadas al atardecer, la cámara deja el cielo, las nubes y la nieve con un tono azulado parejo: el canal rojo queda entre 30 y 60 niveles bajo el azul. La ceniza es gris café, más cálida que lo que la rodea. Como el balance de color cambia con la hora y el clima, el sitio no usa un umbral fijo de color, sino que compara cada píxel con su propio pasado.
 
 1. **Zona de columna.** Se analiza un rectángulo sobre el cráter, por defecto desde unos 60 m bajo la cresta hasta el borde superior de la imagen, unos 970 m sobre ella, y de x = 700 a 1900. Se reduce a 300 píxeles de ancho, de modo que cada píxel de la máscara cubre unos 4 px de la cámara, unos 7 m. Se ajusta en modo Calibrar, arrastrando el rectángulo café, o en el panel Calibración.
 2. **Fondo adaptativo.** Para cada píxel se mantiene un promedio lento de su tono (R − B) y de su luminancia, con una constante de tiempo de 10 minutos. El terreno, la nieve y el cielo quieto se cancelan.
-3. **Dos señales.** Un píxel cuenta como candidato si se volvió más cálido que su fondo, con un aumento de R − B de al menos 12 niveles, o si se oscureció en al menos 25 niveles. A cada diferencia se le resta la mediana de la zona, para que un cambio general de luz no active la detección. En la máscara, café es más cálido y lila es más oscuro.
-4. **Columna enraizada en el cráter.** La columna es la mancha conectada más grande que toca la ROI del cráter. Su borde superior da el tope sobre la cumbre, y su extensión, el alto y el ancho.
-5. **Índice y alerta.** El índice de ceniza es el porcentaje de píxeles candidatos en la zona. Sobre el umbral, 5 % por defecto, el recuadro marca posible emisión.
+3. **Cambio respecto del fondo.** Un píxel cambió si se volvió más cálido que su fondo, con un aumento de R − B de al menos 12 niveles, si se aclaró en al menos 24 niveles, o si se oscureció en al menos 25 niveles sin volverse más azul. A cada diferencia se le resta la mediana de la zona, para que un cambio general de luz no active la detección. Un oscurecimiento que además azulea corresponde a cielo que se despeja tras una nube que había quedado en el fondo, y no se cuenta.
+4. **Ceniza o vapor.** Cada píxel que cambió se clasifica según el color propio de lo que apareció delante del fondo (ver abajo). En la máscara, ocre es ceniza y celeste es vapor.
+5. **Columnas enraizadas en el cráter.** Para cada clase, la columna es la mancha conectada más grande que toca la ROI del cráter. Su borde superior da el tope sobre la cumbre, y su extensión, el alto y el ancho. La medida fija muestra una línea para la ceniza y otra para el vapor.
+6. **Índices y alerta.** El índice de ceniza y el índice de vapor son el porcentaje de píxeles de cada clase en la zona. La alerta usa solo el índice de ceniza: sobre el umbral, 5 % por defecto, el recuadro marca posible emisión.
+
+### Cómo se separa la ceniza del vapor
+
+Una nube translúcida de opacidad α sobre el cielo deja en cada píxel una mezcla: fondo + α · (color de la nube − fondo). El cambio respecto del fondo apunta, entonces, desde el color del cielo hacia el color propio de la nube, y la opacidad solo decide cuánto se avanza en esa dirección. Por eso el detector prolonga el cambio de cada píxel hasta la luminancia de una nube iluminada, 230 en una escala de 0 a 255, y mira qué calidez R − B tendría allí. Si queda bajo 80, el píxel cuenta como vapor; si queda sobre 80, o si el píxel se oscureció, cuenta como ceniza. El vapor es blanco, o apenas dorado con el sol bajo, y la ceniza es parda o gris oscura.
+
+Este criterio reemplaza a uno anterior que comparaba la calidez con el aclaramiento mediante una razón fija. Esa razón funcionaba contra cielo azul profundo, pero cerca del horizonte el cielo ya es claro, de modo que el borde translúcido de una columna de vapor aclara poco y la razón lo hacía pasar por ceniza. Al prolongar el cambio hasta una misma luminancia de referencia, el umbral se adapta solo a lo claro que sea el cielo detrás de cada píxel.
+
+Los dos valores se ajustan en `config.js` (`calidezNube`, `luzNube`), en «Ajustes avanzados» del sitio (la calidez) y en el script de monitoreo (`--calidez-nube`, `--luz-nube`).
+
+### Evaluación con secuencias reales
+
+Se comparó el detector con VIGIA-PlumeNet, que separa ceniza y gas, en dos secuencias de esta cámara, procesadas con la hora real de cada cuadro:
+
+| Episodio | Ceniza y vapor del detector | VIGIA-PlumeNet |
+|---|---|---|
+| 12-10-2026, 07:14 a 07:17, pulso pardo al amanecer | ceniza 6 a 35 %, vapor 1 % o menos | ceniza 3 a 20 %, gas 0 % |
+| 12-10, 07:40 a 07:42, columna blanca | ceniza 13 a 15 %, vapor 23 a 28 % | ceniza 0 a 3 %, gas 20 a 23 % |
+| 12-10, 07:47 a 07:56, cielo con nubes doradas tras la cresta | ceniza 1 a 4 %, vapor 7 a 11 % | ceniza 0 %, gas bajo 1 % |
+| 12-10, 07:59 a 08:00, columna blanca | ceniza 11 a 13 %, vapor 23 a 29 % | gas 16 a 17 % |
+| 12-10, 08:23 a 08:33, columna de vapor | ceniza 1 a 4 %, vapor 26 a 37 % | ceniza 0 a 3 %, gas 0 a 6 % |
+| 16-10, 07:48 a 07:57, emisión de vapor en vivo | ceniza 3 a 5 %, vapor 7 a 19 % | ceniza 0 %, gas 0 a 4 % |
+
+Con el criterio anterior, la emisión del 16-10 daba hasta 27 % de ceniza, la mayor parte por cielo que se despejaba, y el período de 07:47 a 07:57 del 12-10 daba entre 6 y 8 % de ceniza, sobre el umbral de alerta. Los porcentajes del detector son mayores que los del modelo porque también cuentan el borde tenue de la nube, que el modelo deja como fondo. Las secuencias no están en el repositorio.
 
 Limitaciones que conviene tener presentes:
 
-- El método se probó solo con imágenes simuladas: una columna gris café agregada a una foto real, una nube azulada lejos del cráter y un cambio general de luz. La columna se detectó con su tope a 340 m, y la nube y el cambio de luz no generaron detección. Los umbrales deben ajustarse con imágenes reales de emisiones de esta cámara.
-- Con la cámara en blanco y negro de día solo actúa la señal de oscurecimiento, porque sin color no hay calidez que medir. Cuando la cámara cambia entre blanco y negro y color, el fondo se forma de nuevo, porque el tono de cada píxel salta de golpe.
+- El ajuste se hizo con dos amaneceres de una sola cámara, usando VIGIA-PlumeNet como referencia, y el modelo también puede equivocarse. Entre 08:02 y 08:15 del 12-10 el detector mantiene entre 7 y 15 % de ceniza, mientras el modelo ve ceniza solo en algunos cuadros y bajo 6 %. A las 07:18 y 07:20 el modelo pasa a llamar gas a la nube del pulso, ya dispersa y teñida de amarillo por el sol, mientras el detector la sigue contando como ceniza. Ambos casos necesitan el juicio de quien observa.
+- Con el sol bajo, el borde iluminado de cualquier nube se tiñe de dorado y puede pasar por ceniza. Una nube meteorológica que entra a la zona se detecta igual que una emisión; la conexión con el cráter, en la medida de la columna, ayuda a separarlas.
+- Con la cámara en blanco y negro de día no hay calidez que medir: el aclaramiento cuenta como vapor y el oscurecimiento como ceniza. Cuando la cámara cambia entre blanco y negro y color, el fondo se forma de nuevo, porque el tono de cada píxel salta de golpe.
 - El fondo se forma al abrir el sitio. Si en ese momento ya hay una emisión, queda incorporada al fondo y no se detecta hasta que cambie. En ese caso conviene usar Reiniciar fondo con el cielo despejado. Una emisión que dura muchos minutos se va incorporando al fondo, aunque diez veces más lento que el resto.
-- Una nube oscura que pase sobre el cráter, o la sombra de una nube, puede activar la señal de oscurecimiento. Una columna de vapor blanca contra cielo azul puede verse más cálida que el fondo. La máscara permite juzgar cada caso.
+- Una nube oscura que pase sobre el cráter, o la sombra de una nube, puede activar la señal de oscurecimiento. La máscara permite juzgar cada caso.
 - Las medidas de la incandescencia comparten los supuestos de la altura de columna. Además, un píxel equivale a unos 1.85 m en el plano del cráter, así que alto y ancho tienen una resolución de unos 2 m y se muestran redondeados a 5 m. Un punto muy brillante se expande algunos píxeles en el sensor, lo que tiende a sobrestimar alto y ancho. El resplandor reflejado en gases o nubes también puede quedar sobre el umbral y alargar la mancha hacia arriba. Si la mancha toca el borde de la zona de detección, el recuadro lo advierte, porque puede estar recortada.
 
 ## Registro automático desde un computador
@@ -142,7 +168,7 @@ Salidas en la carpeta indicada:
 - `cuadros/`: cuadros crudos.
 - `cuadros_escala/`: cuadros con la escala, la zona del detector activo, la caja de la mancha o la columna y una línea de texto con el resultado.
 - `mascaras/`: máscara de detección de cada captura, solo con `--mascaras`.
-- `registro.csv`: una fila por captura con el detector usado, los dos índices, los píxeles de cada clase y el tope, alto y ancho de la mancha o la columna. Si existe un `registro.csv` de una versión anterior del script, con otras columnas, se renombra y se empieza uno nuevo.
+- `registro.csv`: una fila por captura con el detector usado, el índice de incandescencia, los índices de ceniza y de vapor, los píxeles de cada clase, el tope, alto y ancho de la mancha o la columna de ceniza y el tope de la columna de vapor. Si existe un `registro.csv` de una versión anterior del script, con otras columnas, se renombra y se empieza uno nuevo.
 - `estado_detector.json`: último estado de día o noche y del modo de color de la cámara.
 - `fondo_ceniza.bin` y `fondo_ceniza.json`: el fondo de la detección de ceniza. Se guarda en cada captura, así que sobrevive a un reinicio. Si pasaron más de tres constantes de tiempo desde la última captura de día, por ejemplo después de la noche, se forma uno nuevo.
 
@@ -155,6 +181,7 @@ Opciones principales:
 | `--detector auto/ceniza/incand` | Elige el detector; `auto` decide según la imagen |
 | `--umbral`, `--umbral-brillo` | Alerta y brillo de la incandescencia |
 | `--umbral-ceniza`, `--umbral-calidez`, `--umbral-oscuro` | Alerta y criterios de la ceniza |
+| `--calidez-nube`, `--luz-nube` | Separación entre ceniza y vapor |
 | `--tau-fondo` | Constante de tiempo del fondo de ceniza, en segundos |
 | `--calib X Y0 PX100`, `--roi X Y W H`, `--zona X Y W H` | Calibración, ROI del cráter y zona de columna |
 | `--modo hls`, `--snapshot-url`, `--hls-url` | Fuente de imagen; el modo HLS usa ffmpeg |

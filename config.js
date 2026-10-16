@@ -69,6 +69,12 @@ window.CAM_CONFIG = {
   umbralCeniza: 5,
   umbralCalidez: 12,
   umbralOscuro: 25,
+  // Vapor o ceniza: cada cambio se prolonga hasta la luminancia de una nube
+  // iluminada (luzNube) y, si allí su calidez R − B queda bajo calidezNube,
+  // cuenta como vapor. Ajustado con las secuencias del 12 y 16 de octubre
+  // de 2026, comparadas con VIGIA-PlumeNet (ver README).
+  calidezNube: 80,
+  luzNube: 230,
 
   // VIGIA-PlumeNet en el navegador (ver README). url: modelo ONNX publicado
   // junto al sitio; ortBase: ONNX Runtime Web; recorte: zona analizada, en
